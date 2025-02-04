@@ -1,0 +1,303 @@
+{
+    "ID 001": {
+        "imagen": "img/../img_inv/chocoramo.jpeg",
+        "proveedor": "Ramo",
+        "cantidad": "100",
+        "precio": "2500",
+        "unidad": "UND"
+    },
+    "ID 002": {
+        "imagen": "img/../img_inv/chocolatina.jpg",
+        "proveedor": "Jet",
+        "cantidad": "500",
+        "precio": "1000",
+        "unidad": "UND"
+    },
+    "ID 003": {
+        "imagen": "img/../img_inv/yogo.jpg",
+        "proveedor": "Yogo yogo",
+        "cantidad": "40",
+        "precio": "3500",
+        "unidad": "UND"
+    },
+    "ID 004": {
+        "imagen": "img/../img_inv/jumbo.jpg",
+        "proveedor": "Jumbo",
+        "cantidad": "35",
+        "precio": "2700",
+        "unidad": "UND"
+    },
+    "ID 005": {
+        "imagen": "img/../img_inv/cocosete.png",
+        "proveedor": "Cocosete",
+        "cantidad": "46",
+        "precio": "1600",
+        "unidad": "UND"
+    },
+    "ID 006": {
+        "imagen": "img/../img_inv/griego.jpg",
+        "proveedor": "Griego",
+        "cantidad": "15",
+        "precio": "7500",
+        "unidad": "UND"
+    },
+    "ID 007": {
+        "imagen": "img/../img_inv/alpinito.jpg",
+        "proveedor": "Alpinito",
+        "cantidad": "25",
+        "precio": "1700",
+        "unidad": "UND"
+    },
+    "ID 008": {
+        "imagen": "img/../img_inv/yogo.jpg",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 009": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 010": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 011": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 012": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 013": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 014": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 015": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 016": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 017": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 018": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 019": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 020": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 021": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 022": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 023": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 024": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 025": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 026": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 027": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 028": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "Bolsa"
+    },
+    "ID 029": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 030": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 031": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 032": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 033": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 034": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 035": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 036": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 037": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 038": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 039": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 040": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 041": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 042": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    },
+    "ID 043": {
+        "imagen": "",
+        "proveedor": "",
+        "cantidad": "",
+        "precio": "",
+        "unidad": "UND"
+    }
+}
