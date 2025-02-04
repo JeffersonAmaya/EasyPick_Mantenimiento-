@@ -16,13 +16,33 @@ class ShelfApp(tk.Tk):
         self.guides_canvas = tk.Canvas(self, width=80, height=600, bg="white",highlightthickness=0)
         self.guides_canvas.pack(side=tk.LEFT, fill=tk.Y)
 
+        self.image_mas = tk.PhotoImage(file="img\\mas.png")
+        self.image_menos = tk.PhotoImage(file="img\\menos.png")
+
+        # Ajustar el tamaño de la imagen
+        self.image_mas = self.image_mas.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
+        self.image_menos = self.image_menos.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
+
+
         self.create_vertical_guides()  # Crear las guías verticales
+
+        # Crear el lienzo principal para los soportes
+        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95, y=50)
+        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955, y=50)
 
     def create_vertical_guides(self):
         # Crear los botones óvalos en la columna de la izquierda
         for y in range(0, 105 + 1, 15):
             y_pos = 50 + (y * 10)  # Calcular la posición Y de los óvalos
-            button = tk.Button(self.guides_canvas, text=f"{y} cm >",font=("Arial", 10, "bold"), width=6, height=2, bg="red")
+            button = tk.Button(self.guides_canvas, 
+                                    image=self.image_mas, 
+                                    width=50, 
+                                    height=50, 
+                                    bg="white",
+                                    relief="flat", 
+                                    borderwidth=0)
             button.place(x=20, y=y_pos)
             button.config(command=lambda y_pos=y_pos: self.toggle_shelf(y_pos))
 
@@ -42,7 +62,7 @@ class ShelfApp(tk.Tk):
         # Verifica si ya existe una estantería en esa posición
         for shelf in self.shelves:
             if shelf["y_pos"] == y_pos:
-                messagebox.showwarning("Advertencia", "Ya existe una estantería en esta posición.")
+                #messagebox.showwarning("Advertencia", "Ya existe una estantería en esta posición.")
                 return  # No agrega una estantería si ya hay una en esa posición
 
         # Crear una nueva estantería
@@ -64,24 +84,34 @@ class ShelfApp(tk.Tk):
 
         # Dibujar la base de la estantería
         shelf_canvas.create_rectangle(20, 65, 880, 85, fill="gray", outline="black")
+        
 
         # Dibujar los divisores iniciales
         for val in shelf_data["values"]:
             x = self.value_to_x(val, shelf_data)
-            divider = shelf_canvas.create_rectangle(x - 5, 10, x + 5, 80, fill="black", outline="black")
+            divider = shelf_canvas.create_rectangle(x - 5, 10, x + 5, 80, fill="gray", outline="gray")
             shelf_data["dividers"].append(divider)
 
         # Crear guías y etiquetas
         self.create_guides(shelf_data)
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
+        
 
         # Asignar eventos
         shelf_canvas.bind("<Double-Button-1>", lambda event, data=shelf_data: self.add_divider(event, data))
         shelf_canvas.bind("<Button-3>", lambda event, data=shelf_data: self.remove_divider(event, data))
 
         # Cambiar el color del botón a verde cuando haya una estantería
-        self.buttons[y_pos].config(bg="green")
+        self.buttons[y_pos].config(image=self.image_menos)
+
+        # Crear el lienzo principal para los soportes
+        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95, y=50)
+        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955, y=50)
+
+
 
     def delete_shelf(self, y_pos):
         # Buscar si hay estantería en la posición y_pos
@@ -91,11 +121,11 @@ class ShelfApp(tk.Tk):
                 self.shelves.remove(shelf)
 
                 # Cambiar el color del botón a rojo cuando no haya estantería
-                self.buttons[y_pos].config(bg="red")
+                self.buttons[y_pos].config(image=self.image_mas)
                 return
 
         # Si no hay estantería en esa posición
-        messagebox.showwarning("Advertencia", "No existe una estantería en esta posición para eliminar.")
+        #messagebox.showwarning("Advertencia", "No existe una estantería en esta posición para eliminar.")
 
     def confirm_delete_shelf(self, y_pos):
         # Mostrar un cuadro de diálogo de confirmación antes de eliminar la estantería
@@ -128,7 +158,7 @@ class ShelfApp(tk.Tk):
         x = event.x
         value = self.x_to_value(x)
         if value in shelf_data["values"]:
-            messagebox.showwarning("Advertencia", f"Ya existe un divisor en {value} cm")
+            #messagebox.showwarning("Advertencia", f"Ya existe un divisor en {value} cm")
             return  
         shelf_data["values"].append(value)
         shelf_data["values"].sort()
@@ -150,7 +180,7 @@ class ShelfApp(tk.Tk):
                 del shelf_data["dividers"][i]
                 self.update_space_ids(shelf_data)
                 return
-        messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
+        #messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
 
     def create_labels(self, shelf_data):
         # Crear las etiquetas de los valores de los divisores
@@ -162,15 +192,19 @@ class ShelfApp(tk.Tk):
         # Actualizar las etiquetas de los valores de los divisores
         for i, val in enumerate(shelf_data["values"]):
             y_pos = 130 if val not in [0, 105] else 150
-            label = tk.Label(shelf_data["canvas"], text=f"{val} cm", bg="white")
+            label = tk.Label(shelf_data["canvas"], text=f"{val} cm", bg="black")
             label.place(x=self.value_to_x(val, shelf_data) - 15, y=y_pos)
             shelf_data["labels"].append(label)
 
     def create_guides(self, shelf_data):
         # Crear guías de 1 cm en 1 cm
-        for i in range(0, 105 + 1, 5):
+        for i in range(5, 100 + 1, 5):
             x = self.value_to_x(i, shelf_data)
             shelf_data["canvas"].create_oval(x - 2, 72, x + 2, 75, fill="black")
+            
+            # Formatear el número para que siempre tenga dos dígitos
+            guide_label = tk.Label(shelf_data["canvas"], text=f"{i:03d}", font=("Arial", 8))
+            guide_label.place(x=x-10, y=72+20)
 
     def update_space_ids(self, shelf_data):
         # Actualizar los identificadores de los espacios entre divisores
