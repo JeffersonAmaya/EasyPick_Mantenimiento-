@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import json
 import os
+import string
 
 class ShelfApp(tk.Tk):
     def __init__(self):
@@ -101,7 +102,6 @@ class ShelfApp(tk.Tk):
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
         
-
         # Asignar eventos
         shelf_canvas.bind("<Double-Button-1>", lambda event, data=shelf_data: self.add_divider(event, data))
         shelf_canvas.bind("<Button-3>", lambda event, data=shelf_data: self.remove_divider(event, data))
@@ -116,8 +116,7 @@ class ShelfApp(tk.Tk):
         self.main_canvas_2.place(x=955, y=50)
 
         self.save_config()
-
-
+        #self.save_coordinates()
 
     def delete_shelf(self, y_pos):
         # Buscar si hay estantería en la posición y_pos
@@ -129,6 +128,7 @@ class ShelfApp(tk.Tk):
                 # Cambiar el color del botón a rojo cuando no haya estantería
                 self.buttons[y_pos].config(image=self.image_mas)
                 self.save_config()
+                self.save_coordinates()
                 return
 
         # Si no hay estantería en esa posición
@@ -176,6 +176,7 @@ class ShelfApp(tk.Tk):
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
         self.save_config()
+        self.save_coordinates()
 
     def remove_divider(self, event, shelf_data):
         # Eliminar un divisor al hacer clic derecho
@@ -189,6 +190,7 @@ class ShelfApp(tk.Tk):
                 del shelf_data["dividers"][i]
                 self.update_space_ids(shelf_data)
                 self.save_config()
+                self.save_coordinates()
                 return
         #messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
 
@@ -279,7 +281,43 @@ class ShelfApp(tk.Tk):
             self.create_labels(shelf)
             self.update_space_ids(shelf)
 
+    def save_coordinates(self):
 
+        coordinates = {"shelves": {}}
+        
+
+        # Ordenar estanterías de arriba hacia abajo según la coordenada Z (y_pos)
+        sorted_shelves = sorted(self.shelves, key=lambda s: s["y_pos"])
+
+        # Generar letras A, B, C... para cada fila de estantería
+        row_labels = string.ascii_uppercase  # "A", "B", "C", ..., "Z"
+
+        for index, shelf in enumerate(sorted_shelves):  # Ahora está ordenado correctamente
+            row_letter = row_labels[index]  # Asigna A, B, C... en orden de arriba hacia abajo
+            z_position = (index + 1) * 15  # Ahora los valores en Z serán 15, 30, 45, 60...
+
+            coordinates["shelves"][row_letter] = {}
+
+            for i in range(len(shelf["values"]) - 1):
+                start = shelf["values"][i]
+                end = shelf["values"][i + 1]
+
+                # Calcular la coordenada X como la mitad entre dos separadores
+                x_center = (start + end) / 2
+
+                # Nombre del espacio: "A1", "A2", ..., "B1", "B2"...
+                space_name = f"{row_letter}{i + 1}"
+                coordinates["shelves"][row_letter][space_name] = {
+                    "x": x_center,
+                    "z": z_position
+                }
+
+        # Guardar en "coordinates.json"
+        with open("coordinates.json", "w") as f:
+            json.dump(coordinates, f, indent=4)
+
+        print("Coordenadas guardadas en 'coordinates.json'")
+                
 if __name__ == "__main__":
     app = ShelfApp()
     app.mainloop()
