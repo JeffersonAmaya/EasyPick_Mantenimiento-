@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
+import json
+import os
 
 class ShelfApp(tk.Tk):
     def __init__(self):
@@ -31,6 +33,8 @@ class ShelfApp(tk.Tk):
         self.main_canvas_1.place(x=95, y=50)
         self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
         self.main_canvas_2.place(x=955, y=50)
+
+        self.load_config()
 
     def create_vertical_guides(self):
         # Crear los botones óvalos en la columna de la izquierda
@@ -111,6 +115,8 @@ class ShelfApp(tk.Tk):
         self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
         self.main_canvas_2.place(x=955, y=50)
 
+        self.save_config()
+
 
 
     def delete_shelf(self, y_pos):
@@ -122,6 +128,7 @@ class ShelfApp(tk.Tk):
 
                 # Cambiar el color del botón a rojo cuando no haya estantería
                 self.buttons[y_pos].config(image=self.image_mas)
+                self.save_config()
                 return
 
         # Si no hay estantería en esa posición
@@ -149,9 +156,10 @@ class ShelfApp(tk.Tk):
         # Actualizar las posiciones de los divisores
         for i, val in enumerate(shelf_data["values"]):
             x = self.value_to_x(val, shelf_data)
-            shelf_data["canvas"].coords(shelf_data["dividers"][i], x - 5, 10, x + 5, 90)# Acá modifico la altura del divisor 
-        self.update_labels(shelf_data)
-        self.update_space_ids(shelf_data)
+            if i < len(shelf_data["dividers"]):
+                shelf_data["canvas"].coords(shelf_data["dividers"][i], x - 5, 10, x + 5, 90)
+                self.update_labels(shelf_data)
+                self.update_space_ids(shelf_data)
 
     def add_divider(self, event, shelf_data):
         # Agregar un divisor en la posición del clic
@@ -167,6 +175,7 @@ class ShelfApp(tk.Tk):
         shelf_data["dividers"].insert(index, divider)
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
+        self.save_config()
 
     def remove_divider(self, event, shelf_data):
         # Eliminar un divisor al hacer clic derecho
@@ -179,6 +188,7 @@ class ShelfApp(tk.Tk):
                 shelf_data["canvas"].delete(shelf_data["dividers"][i])  
                 del shelf_data["dividers"][i]
                 self.update_space_ids(shelf_data)
+                self.save_config()
                 return
         #messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
 
@@ -230,6 +240,47 @@ class ShelfApp(tk.Tk):
 
             shelf_data["next_id"] += 1
 
+    def save_config(self):
+        config = {"shelves": [{"y_pos": s["y_pos"], "values": s["values"]} for s in self.shelves]}
+        with open("config.json", "w") as f:
+            json.dump(config, f, indent=4)
+
+    def load_config(self):
+        if not os.path.exists("config.json"):
+            return
+
+        with open("config.json", "r") as f:
+            config = json.load(f)
+
+        # Limpiar estanterías actuales
+        for shelf in self.shelves:
+            shelf["canvas"].destroy()
+        self.shelves.clear()
+
+        # Restaurar estanterías desde la configuración guardada
+        for shelf_data in config["shelves"]:
+            self.add_shelf(shelf_data["y_pos"])
+            shelf = self.shelves[-1]  # Última estantería agregada
+            shelf["values"] = shelf_data["values"]
+
+            # Eliminar cualquier divisor que pueda haberse creado antes
+            for divider in shelf["dividers"]:
+                shelf["canvas"].delete(divider)
+            shelf["dividers"].clear()
+
+            # Dibujar de nuevo los divisores en marrón excepto los extremos
+            for val in shelf["values"]:
+                x = self.value_to_x(val, shelf)
+                color = "gray" if val in [0, 105] else "brown"  # Extremos en gris, internos en marrón
+                divider = shelf["canvas"].create_rectangle(x - 5, 10, x + 5, 80, fill=color, outline="black")
+                shelf["dividers"].append(divider)
+
+            self.update_positions(shelf)
+            self.create_labels(shelf)
+            self.update_space_ids(shelf)
+
+
 if __name__ == "__main__":
     app = ShelfApp()
     app.mainloop()
+
