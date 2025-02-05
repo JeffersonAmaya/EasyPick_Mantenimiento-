@@ -1,198 +1,286 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
+import json
+import os
 
-class EstanteriaApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Estantería Interactiva")
-
-        # Configuración inicial
-        self.total_length = 105  # Longitud total de la fila en cm
-        self.min_spacing = 5    # Espaciado mínimo entre divisores en cm
-        self.rows = 6           # Número de filas
-        self.divisiones_por_fila = {i: [0, 15, 30, 45, 60, 75, 90, 105] for i in range(self.rows)}
-
-        # Canvas para dibujar la estantería
-        self.canvas = tk.Canvas(self.root, width=900, height=700, bg="white")
-        self.canvas.pack(pady=20)
-
-        # Crear un frame para los botones
-        self.boton_frame = tk.Frame(self.root, bg="white", bd=0, relief="solid")
-        self.boton_frame.place(x=200, y=680)  # Coloca el frame dentro del canvas
-
-        # Botones dentro del frame
-        self.boton_agregar = tk.Button(self.boton_frame, text="Agregar Divisor", command=self.agregar_divisor)
-        self.boton_eliminar = tk.Button(self.boton_frame, text="Eliminar Divisor", command=self.eliminar_divisor)
-        self.boton_modificar = tk.Button(self.boton_frame, text="Modificar Divisor", command=self.modificar_divisor)
-
-        # Colocar los botones dentro del frame
-        self.boton_agregar.pack(side=tk.LEFT, padx=10)
-        self.boton_eliminar.pack(side=tk.LEFT, padx=10)
-        self.boton_modificar.pack(side=tk.LEFT, padx=10)
-
-        self.dibujar_estanteria()
-
-    def dibujar_estanteria(self):
-        """Dibuja la estantería y sus divisores."""
-        self.canvas.delete("all")
-        espacio_entre_estanterias = 40  # Espacio adicional entre las estanterías
-        contador = 1  # Contador para numerar los espacios
-        for row, divisiones in self.divisiones_por_fila.items():
-            y_offset = 50 + row * (70 + espacio_entre_estanterias)  # Ajustamos el offset de y para crear el espacio
-            self.canvas.create_rectangle(50, y_offset + 20, 850, y_offset , fill="gainsboro")
-
-            for i, divisor in enumerate(divisiones):
-                x = 50 + (divisor / self.total_length) * 800
-                self.canvas.create_line(x, y_offset - 40, x, y_offset + 20, fill="black", width=5)
-
-                # Mostrar etiquetas de distancia
-                if i > 0:
-                    distancia = divisor - divisiones[i - 1]
-                    x_text = 50 + ((divisor + divisiones[i - 1]) / 2 / self.total_length) * 800
-                    self.canvas.create_text(x_text, y_offset + 10 , text=f"{distancia} cm", fill="steel blue",font=("Arial", 8))
-
-                # Mostrar etiquetas A1, A2, A3, etc. en los divisores
-                letra_fila = chr(65 + row)  # Genera A, B, C, etc.
-                self.canvas.create_text(x, y_offset + 30, text=f"{letra_fila}{i + 1}", fill="black",font=("Arial", 8))
-
-                # Mostrar números de espacio como 001, 002, 003, etc. entre los divisores
-                if i > 0:
-                    x_text = 50 + ((divisor + divisiones[i - 1]) / 2 / self.total_length) * 800
-                    numero_espacio = f"ID {contador:03d}"  # Formatea el número con 3 dígitos
-                    self.canvas.create_text(x_text, y_offset - 30, text=numero_espacio, fill="#00AADA", font=("Arial", 8))
-                    contador += 1
+class ShelfApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.geometry("1000x1300")  # Tamaño de la ventana
+        self.title("MultiSlider Shelf")  # Título de la ventana
+        self.configure(bg="white")  # Cambiar el fondo de la ventana principal a blanco
 
 
+        self.shelves = []  # Lista de estanterías añadidas
+        self.buttons = {}  # Diccionario de botones (óvalos)
 
-    def solicitar_fila(self):
-        """Solicita al usuario el número de fila."""
-        try:
-            fila = int(simpledialog.askstring("Seleccionar Fila", "Introduce el número de fila (1-7):")) - 1
-            if fila not in self.divisiones_por_fila:
-                raise ValueError("Fila fuera de rango.")
-            return fila
-        except (ValueError, TypeError):
-            messagebox.showerror("Error", "Fila inválida. Inténtalo de nuevo.")
-            return None
+        # Crear el lienzo de guías
+        self.guides_canvas = tk.Canvas(self, width=80, height=600, bg="white",highlightthickness=0)
+        self.guides_canvas.pack(side=tk.LEFT, fill=tk.Y)
 
-    def agregar_divisor(self):
-        """Agrega un nuevo divisor a la estantería."""
-        fila = self.solicitar_fila()
-        if fila is None:
+        self.image_mas = tk.PhotoImage(file="img\\mas.png")
+        self.image_menos = tk.PhotoImage(file="img\\menos.png")
+
+        # Ajustar el tamaño de la imagen
+        self.image_mas = self.image_mas.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
+        self.image_menos = self.image_menos.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
+
+
+        self.create_vertical_guides()  # Crear las guías verticales
+
+        # Crear el lienzo principal para los soportes
+        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95, y=50)
+        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955, y=50)
+
+        self.load_config()
+
+    def create_vertical_guides(self):
+        # Crear los botones óvalos en la columna de la izquierda
+        for y in range(0, 105 + 1, 15):
+            y_pos = 50 + (y * 10)  # Calcular la posición Y de los óvalos
+            button = tk.Button(self.guides_canvas, 
+                                    image=self.image_mas, 
+                                    width=50, 
+                                    height=50, 
+                                    bg="white",
+                                    relief="flat", 
+                                    borderwidth=0)
+            button.place(x=20, y=y_pos)
+            button.config(command=lambda y_pos=y_pos: self.toggle_shelf(y_pos))
+
+            self.buttons[y_pos] = button  # Guardar el botón en el diccionario
+
+    def toggle_shelf(self, y_pos):
+        # Verificar si ya existe una estantería en esa posición
+        for shelf in self.shelves:
+            if shelf["y_pos"] == y_pos:
+                # Si hay una estantería, preguntamos si está seguro de eliminarla
+                self.confirm_delete_shelf(y_pos)
+                return
+        # Si no existe, agregamos una estantería
+        self.add_shelf(y_pos)
+
+    def add_shelf(self, y_pos):
+        # Verifica si ya existe una estantería en esa posición
+        for shelf in self.shelves:
+            if shelf["y_pos"] == y_pos:
+                #messagebox.showwarning("Advertencia", "Ya existe una estantería en esta posición.")
+                return  # No agrega una estantería si ya hay una en esa posición
+
+        # Crear una nueva estantería
+        shelf_canvas = tk.Canvas(self, width=900, height=150, bg="white",highlightthickness=0)
+        shelf_canvas.place(x=80, y=y_pos - 45)
+
+        # Configurar la estantería
+        shelf_data = {
+            "canvas": shelf_canvas,
+            "y_pos": y_pos,
+            "dividers": [],
+            "values": [0, 105],
+            "labels": [],
+            "space_labels": {},
+            "space_ids": {},
+            "next_id": 1,
+        }
+        self.shelves.append(shelf_data)
+
+        # Dibujar la base de la estantería
+        shelf_canvas.create_rectangle(20, 65, 880, 85, fill="gray", outline="black")
+        
+
+        # Dibujar los divisores iniciales
+        for val in shelf_data["values"]:
+            x = self.value_to_x(val, shelf_data)
+            divider = shelf_canvas.create_rectangle(x - 5, 10, x + 5, 80, fill="gray", outline="gray")
+            shelf_data["dividers"].append(divider)
+
+        # Crear guías y etiquetas
+        self.create_guides(shelf_data)
+        self.update_positions(shelf_data)
+        self.create_labels(shelf_data)
+        
+
+        # Asignar eventos
+        shelf_canvas.bind("<Double-Button-1>", lambda event, data=shelf_data: self.add_divider(event, data))
+        shelf_canvas.bind("<Button-3>", lambda event, data=shelf_data: self.remove_divider(event, data))
+
+        # Cambiar el color del botón a verde cuando haya una estantería
+        self.buttons[y_pos].config(image=self.image_menos)
+
+        # Crear el lienzo principal para los soportes
+        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95, y=50)
+        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955, y=50)
+
+        self.save_config()
+
+
+
+    def delete_shelf(self, y_pos):
+        # Buscar si hay estantería en la posición y_pos
+        for shelf in self.shelves:
+            if shelf["y_pos"] == y_pos:
+                shelf["canvas"].destroy()
+                self.shelves.remove(shelf)
+
+                # Cambiar el color del botón a rojo cuando no haya estantería
+                self.buttons[y_pos].config(image=self.image_mas)
+                self.save_config()
+                return
+
+        # Si no hay estantería en esa posición
+        #messagebox.showwarning("Advertencia", "No existe una estantería en esta posición para eliminar.")
+
+    def confirm_delete_shelf(self, y_pos):
+        # Mostrar un cuadro de diálogo de confirmación antes de eliminar la estantería
+        response = messagebox.askyesno(
+            "Confirmación", 
+            "¿Está seguro de que desea eliminar esta estantería? Se perderán todos los cambios realizados en esta estantería."
+        )
+        if response:
+            self.delete_shelf(y_pos)
+
+    def value_to_x(self, val, shelf_data):
+        # Convertir valor a posición x en la interfaz
+        return 20 + (val - 0) / (105 - 0) * (900 - 40)
+
+    def x_to_value(self, x):
+        # Convertir posición x a valor correspondiente
+        raw_value = 0 + ((x - 20) / (900 - 40)) * (105 - 0)
+        return round(raw_value / 5) * 5  
+
+    def update_positions(self, shelf_data):
+        # Actualizar las posiciones de los divisores
+        for i, val in enumerate(shelf_data["values"]):
+            x = self.value_to_x(val, shelf_data)
+            if i < len(shelf_data["dividers"]):
+                shelf_data["canvas"].coords(shelf_data["dividers"][i], x - 5, 10, x + 5, 90)
+                self.update_labels(shelf_data)
+                self.update_space_ids(shelf_data)
+
+    def add_divider(self, event, shelf_data):
+        # Agregar un divisor en la posición del clic
+        x = event.x
+        value = self.x_to_value(x)
+        if value in shelf_data["values"]:
+            #messagebox.showwarning("Advertencia", f"Ya existe un divisor en {value} cm")
+            return  
+        shelf_data["values"].append(value)
+        shelf_data["values"].sort()
+        index = shelf_data["values"].index(value)
+        divider = shelf_data["canvas"].create_rectangle(0, 0, 10, 80, fill="brown", outline="black")
+        shelf_data["dividers"].insert(index, divider)
+        self.update_positions(shelf_data)
+        self.create_labels(shelf_data)
+        self.save_config()
+
+    def remove_divider(self, event, shelf_data):
+        # Eliminar un divisor al hacer clic derecho
+        if len(shelf_data["values"]) <= 2:
+            return
+        x_clicked = event.x
+        for i in range(1, len(shelf_data["values"]) - 1):
+            if abs(self.value_to_x(shelf_data["values"][i], shelf_data) - x_clicked) < 10:
+                del shelf_data["values"][i]
+                shelf_data["canvas"].delete(shelf_data["dividers"][i])  
+                del shelf_data["dividers"][i]
+                self.update_space_ids(shelf_data)
+                self.save_config()
+                return
+        #messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
+
+    def create_labels(self, shelf_data):
+        # Crear las etiquetas de los valores de los divisores
+        for label in shelf_data["labels"]:
+            label.destroy()
+        shelf_data["labels"].clear()
+
+    def update_labels(self, shelf_data):
+        # Actualizar las etiquetas de los valores de los divisores
+        for i, val in enumerate(shelf_data["values"]):
+            y_pos = 130 if val not in [0, 105] else 150
+            label = tk.Label(shelf_data["canvas"], text=f"{val} cm", bg="black")
+            label.place(x=self.value_to_x(val, shelf_data) - 15, y=y_pos)
+            shelf_data["labels"].append(label)
+
+    def create_guides(self, shelf_data):
+        # Crear guías de 1 cm en 1 cm
+        for i in range(5, 100 + 1, 5):
+            x = self.value_to_x(i, shelf_data)
+            shelf_data["canvas"].create_oval(x - 2, 72, x + 2, 75, fill="black")
+            
+            # Formatear el número para que siempre tenga dos dígitos
+            guide_label = tk.Label(shelf_data["canvas"], text=f"{i:03d}", font=("Arial", 8))
+            guide_label.place(x=x-10, y=72+20)
+
+    def update_space_ids(self, shelf_data):
+        # Actualizar los identificadores de los espacios entre divisores
+        for label in shelf_data["space_labels"].values():
+            label.destroy()
+        shelf_data["space_labels"].clear()
+        shelf_data["space_ids"].clear()
+        shelf_data["next_id"] = 1
+
+        for i in range(len(shelf_data["values"]) - 1):
+            start = shelf_data["values"][i]
+            end = shelf_data["values"][i + 1]
+            space_id = f"{shelf_data['next_id']}"
+            shelf_data["space_ids"][(start, end)] = space_id
+
+            x_start = self.value_to_x(start, shelf_data)
+            x_end = self.value_to_x(end, shelf_data)
+            x_center = (x_start + x_end) / 2
+
+            label = tk.Label(shelf_data["canvas"], text=space_id, font=("Arial", 10, "bold"), bg="white")
+            label.place(x=x_center - 5, y=30)  
+            shelf_data["space_labels"][(start, end)] = label
+
+            shelf_data["next_id"] += 1
+
+    def save_config(self):
+        config = {"shelves": [{"y_pos": s["y_pos"], "values": s["values"]} for s in self.shelves]}
+        with open("config.json", "w") as f:
+            json.dump(config, f, indent=4)
+
+    def load_config(self):
+        if not os.path.exists("config.json"):
             return
 
-        try:
-            nuevo = int(simpledialog.askstring("Agregar Divisor", "Introduce la posición del nuevo divisor (en cm):"))
-            divisiones = self.divisiones_por_fila[fila]
+        with open("config.json", "r") as f:
+            config = json.load(f)
 
-            if nuevo in divisiones:
-                messagebox.showerror("Error", "El divisor ya existe en esa posición.")
-                return
-            if nuevo <= 0 or nuevo >= self.total_length:
-                messagebox.showerror("Error", "No puedes agregar divisores en los extremos.")
-                return
+        # Limpiar estanterías actuales
+        for shelf in self.shelves:
+            shelf["canvas"].destroy()
+        self.shelves.clear()
 
-            # Verificar espaciado mínimo
-            for divisor in divisiones:
-                if abs(divisor - nuevo) < self.min_spacing:
-                    messagebox.showerror("Error", f"El divisor debe estar al menos a {self.min_spacing} cm de otro.")
-                    return
+        # Restaurar estanterías desde la configuración guardada
+        for shelf_data in config["shelves"]:
+            self.add_shelf(shelf_data["y_pos"])
+            shelf = self.shelves[-1]  # Última estantería agregada
+            shelf["values"] = shelf_data["values"]
 
-            divisiones.append(nuevo)
-            divisiones.sort()
-            self.dibujar_estanteria()
-        except ValueError:
-            messagebox.showerror("Error", "Valor inválido. Inténtalo de nuevo.")
+            # Eliminar cualquier divisor que pueda haberse creado antes
+            for divider in shelf["dividers"]:
+                shelf["canvas"].delete(divider)
+            shelf["dividers"].clear()
 
-    def eliminar_divisor(self):
-        """Elimina un divisor de la estantería por índice (A1, A2, B1, B2, etc.)."""
-        fila = self.solicitar_fila()
-        if fila is None:
-            return
+            # Dibujar de nuevo los divisores en marrón excepto los extremos
+            for val in shelf["values"]:
+                x = self.value_to_x(val, shelf)
+                color = "gray" if val in [0, 105] else "brown"  # Extremos en gris, internos en marrón
+                divider = shelf["canvas"].create_rectangle(x - 5, 10, x + 5, 80, fill=color, outline="black")
+                shelf["dividers"].append(divider)
 
-        # Solicitar el índice del divisor a eliminar (Ejemplo: A1, B2)
-        divisor_indice = simpledialog.askstring("Eliminar Divisor", "Introduce el índice del divisor :")
-        if divisor_indice is None:
-            return
-
-        try:
-            letra_fila = divisor_indice[0].upper()  # Letra de la fila (A, B, C...)
-            num_divisor = int(divisor_indice[1:]) - 1  # El número del divisor (1, 2, 3...) -> índice 0, 1, 2
-
-            # Verificar que la letra de la fila sea válida
-            if letra_fila < 'A' or letra_fila > chr(ord('A') + self.rows - 1):
-                messagebox.showerror("Error", "Fila inválida.")
-                return
-
-            if num_divisor < 0 or num_divisor >= len(self.divisiones_por_fila[fila]):
-                messagebox.showerror("Error", "Índice de divisor fuera de rango.")
-                return
-
-            # Obtener el valor real del divisor
-            divisor = self.divisiones_por_fila[fila][num_divisor]
-
-            if divisor in [0, self.total_length]:
-                messagebox.showerror("Error", "No puedes eliminar los divisores de los extremos.")
-                return
-
-            # Eliminar el divisor
-            self.divisiones_por_fila[fila].remove(divisor)
-            self.dibujar_estanteria()
-
-        except (ValueError, IndexError):
-            messagebox.showerror("Error", "Índice inválido. Inténtalo de nuevo.")
+            self.update_positions(shelf)
+            self.create_labels(shelf)
+            self.update_space_ids(shelf)
 
 
-    def modificar_divisor(self):
-        """Modifica un divisor de la estantería por índice (A1, A2, B1, B2, etc.)."""
-        fila = self.solicitar_fila()
-        if fila is None:
-            return
+if __name__ == "__main__":
+    app = ShelfApp()
+    app.mainloop()
 
-        # Solicitar el índice del divisor a modificar (Ejemplo: A1, B2)
-        divisor_indice = simpledialog.askstring("Modificar Divisor", "Introduce el índice del divisor :")
-        if divisor_indice is None:
-            return
-
-        try:
-            letra_fila = divisor_indice[0].upper()  # Letra de la fila (A, B, C...)
-            num_divisor = int(divisor_indice[1:]) - 1  # El número del divisor (1, 2, 3...) -> índice 0, 1, 2
-
-            # Verificar que la letra de la fila sea válida
-            if letra_fila < 'A' or letra_fila > chr(ord('A') + self.rows - 1):
-                messagebox.showerror("Error", "Fila inválida.")
-                return
-
-            if num_divisor < 0 or num_divisor >= len(self.divisiones_por_fila[fila]):
-                messagebox.showerror("Error", "Índice de divisor fuera de rango.")
-                return
-
-            # Obtener el valor real del divisor
-            divisor = self.divisiones_por_fila[fila][num_divisor]
-
-            if divisor in [0, self.total_length]:
-                messagebox.showerror("Error", "No puedes modificar los divisores de los extremos.")
-                return
-
-            # Solicitar la nueva posición del divisor
-            nuevo = int(simpledialog.askstring("Nueva Posición", "Introduce la nueva posición del divisor (en cm):"))
-            if nuevo <= 0 or nuevo >= self.total_length:
-                messagebox.showerror("Error", "No puedes mover divisores a los extremos.")
-                return
-            if any(abs(nuevo - d) < self.min_spacing for d in self.divisiones_por_fila[fila] if d != divisor):
-                messagebox.showerror("Error", f"El divisor debe estar al menos a {self.min_spacing} cm de otro.")
-                return
-
-            # Modificar el divisor
-            self.divisiones_por_fila[fila][self.divisiones_por_fila[fila].index(divisor)] = nuevo
-            self.divisiones_por_fila[fila].sort()
-            self.dibujar_estanteria()
-
-        except (ValueError, IndexError):
-            messagebox.showerror("Error", "Índice inválido. Inténtalo de nuevo.")
-
-
-# Crear ventana principal
-root = tk.Tk()
-estanteria_app = EstanteriaApp(root)
-root.mainloop()
