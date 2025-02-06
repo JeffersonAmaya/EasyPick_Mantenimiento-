@@ -1211,6 +1211,8 @@ class EasyPickApp:
         self.main_canvas_2 = tk.Canvas(self.area_central, width=11, height=1200, bg="gray", highlightthickness=0)
         self.main_canvas_2.place(x=955, y=50)
 
+        self.entry_separacion()
+
         self.save_config()
 
 
@@ -1373,7 +1375,23 @@ class EasyPickApp:
 
             self.update_positions(shelf)
             self.create_labels(shelf)
-            self.update_space_ids(shelf)   
+            self.update_space_ids(shelf)  
+
+    def entry_separacion(self):
+
+        # Crear y ubicar la etiqueta
+        tk.Label(
+                                        self.area_central,
+                                        text=f"Separación:  ",
+                                        bg="white",
+                                        font=self.fuente_2).place(x=100, y=1300)  # Coordenadas absolutas dentro del frame
+
+        self.entrada_separacion = tk.Entry(self.area_central, 
+                                        width=10, 
+                                        justify="center")
+        self.entrada_separacion.insert(0, "15") 
+        self.entrada_separacion.place(x=250, y=1300)  # Coordenadas absolutas dentro del frame
+
 
     #Funciones de la opcion inventario 
 
@@ -1655,6 +1673,7 @@ class EasyPickApp:
     def guardar_coordenadas(self, coordenadas):
         with open(self.ARCHIVO_COORDENADAS, "w") as archivo:
             json.dump(coordenadas, archivo, indent=4)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
