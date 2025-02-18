@@ -11,57 +11,88 @@ class ShelfApp(tk.Tk):
         self.title("MultiSlider Shelf")  # Título de la ventana
         self.configure(bg="white")  # Cambiar el fondo de la ventana principal a blanco
 
+        self.attributes("-fullscreen", True)  # Iniciar en pantalla completa
+        self.bind("<F11>", lambda event: self.attributes("-fullscreen", not self.attributes("-fullscreen")))  # Alternar con F11
+        self.bind("<Escape>", lambda event: self.attributes("-fullscreen", False))  # Salir con Escape
 
         self.shelves = []  # Lista de estanterías añadidas
         self.buttons = {}  # Diccionario de botones (óvalos)
+        self.move_x = 30
 
         # Crear el lienzo de guías
-        self.guides_canvas = tk.Canvas(self, width=80, height=600, bg="white",highlightthickness=0)
-        self.guides_canvas.pack(side=tk.LEFT, fill=tk.Y)
+        self.guides_canvas = tk.Canvas(self, width=80, height=1800, bg="white", highlightthickness=0)
+        self.guides_canvas.place(x=35, y=50)  # Mueve el panel de guías más a la derecha
 
-        self.image_mas = tk.PhotoImage(file="img\\mas.png")
-        self.image_menos = tk.PhotoImage(file="img\\menos.png")
+        self.image_mas = tk.PhotoImage(file="img/mas.png")
+        self.image_menos = tk.PhotoImage(file="img/menos.png")
 
         # Ajustar el tamaño de la imagen
         self.image_mas = self.image_mas.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
         self.image_menos = self.image_menos.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
-
-
-        self.create_vertical_guides()  # Crear las guías verticales
-
-        # Crear el lienzo principal para los soportes
-        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_1.place(x=95, y=50)
-        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_2.place(x=955, y=50)
-
+        
+        self.create_vertical_guides() 
         self.load_config()
+        self.vertical_profile()
 
     def create_vertical_guides(self):
-        # Crear los botones óvalos en la columna de la izquierda
-        for y in range(0, 105 + 1, 15):
-            y_pos = 50 + (y * 10)  # Calcular la posición Y de los óvalos
-            button = tk.Button(self.guides_canvas, 
-                                    image=self.image_mas, 
-                                    width=50, 
-                                    height=50, 
-                                    bg="white",
-                                    relief="flat", 
-                                    borderwidth=0)
-            button.place(x=20, y=y_pos)
-            button.config(command=lambda y_pos=y_pos: self.toggle_shelf(y_pos))
+        step = 5  # Espaciado cada 5 cm
+        min_spacing = 15+5  # Mínimo de 15 cm entre estanterías
 
+        for y in range(0, 105 + 1, step):  # Ahora iteramos cada 5 cm
+            y_pos = 50 + (y * 15)  # Calcular la posición en píxeles
+            
+            button = tk.Button(self.guides_canvas, 
+                            image=self.image_mas, 
+                            width=50, 
+                            height=50, 
+                            bg="white",
+                            relief="flat", 
+                            borderwidth=0)
+            button.place(x=20, y=y_pos)
+            
+            # Configurar comando para verificar la distancia antes de agregar estantería
+            button.config(command=lambda y_pos=y_pos: self.check_and_toggle_shelf(y_pos, min_spacing))
+            
             self.buttons[y_pos] = button  # Guardar el botón en el diccionario
+    
+    def check_and_toggle_shelf(self, y_pos, min_spacing):
+        existing_shelf = None
+        
+        for shelf in self.shelves:
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Si ya existe en la posición
+                existing_shelf = shelf
+                break
+
+        if existing_shelf:
+            self.confirm_delete_shelf(y_pos)  # Si la estantería ya existe, permitir eliminarla
+        else:
+            # Verificar distancia mínima solo al agregar
+            for shelf in self.shelves:
+                if abs(shelf["y_pos"] - y_pos) < min_spacing * 10:  # Convertir 15 cm a píxeles
+                    messagebox.showwarning("Advertencia", "Debe haber al menos 15 cm entre estanterías.")
+                    return
+            
+            self.add_shelf(y_pos)  # Si pasa la validación, agregar la estantería
 
     def toggle_shelf(self, y_pos):
-        # Verificar si ya existe una estantería en esa posición
+        # Buscar una estantería con margen de tolerancia debido al espaciado extra
         for shelf in self.shelves:
-            if shelf["y_pos"] == y_pos:
-                # Si hay una estantería, preguntamos si está seguro de eliminarla
-                self.confirm_delete_shelf(y_pos)
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Permite pequeña diferencia en píxeles
+                self.confirm_delete_shelf(shelf["y_pos"])
                 return
-        # Si no existe, agregamos una estantería
+        
         self.add_shelf(y_pos)
+
+    def delete_shelf(self, y_pos):
+        for shelf in self.shelves:
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Permite margen de error
+                shelf["canvas"].destroy()
+                self.shelves.remove(shelf)
+                self.buttons[y_pos].config(image=self.image_mas)
+                self.save_config()
+                self.save_coordinates()
+                return
+
 
     def add_shelf(self, y_pos):
         # Verifica si ya existe una estantería en esa posición
@@ -72,7 +103,7 @@ class ShelfApp(tk.Tk):
 
         # Crear una nueva estantería
         shelf_canvas = tk.Canvas(self, width=900, height=150, bg="white",highlightthickness=0)
-        shelf_canvas.place(x=80, y=y_pos - 45)
+        shelf_canvas.place(x=+80+self.move_x, y=y_pos )
 
         # Configurar la estantería
         shelf_data = {
@@ -101,6 +132,7 @@ class ShelfApp(tk.Tk):
         self.create_guides(shelf_data)
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
+        self.vertical_profile()
         
         # Asignar eventos
         shelf_canvas.bind("<Double-Button-1>", lambda event, data=shelf_data: self.add_divider(event, data))
@@ -108,31 +140,17 @@ class ShelfApp(tk.Tk):
 
         # Cambiar el color del botón a verde cuando haya una estantería
         self.buttons[y_pos].config(image=self.image_menos)
+        self.save_coordinates()
+
+    def vertical_profile(self):
 
         # Crear el lienzo principal para los soportes
-        self.main_canvas_1 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_1.place(x=95, y=50)
-        self.main_canvas_2 = tk.Canvas(self, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_2.place(x=955, y=50)
+        self.main_canvas_1 = tk.Canvas(self, width=11, height=1800, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95+self.move_x, y=50)
+        self.main_canvas_2 = tk.Canvas(self, width=11, height=1800, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955+self.move_x, y=50)
 
         self.save_config()
-        #self.save_coordinates()
-
-    def delete_shelf(self, y_pos):
-        # Buscar si hay estantería en la posición y_pos
-        for shelf in self.shelves:
-            if shelf["y_pos"] == y_pos:
-                shelf["canvas"].destroy()
-                self.shelves.remove(shelf)
-
-                # Cambiar el color del botón a rojo cuando no haya estantería
-                self.buttons[y_pos].config(image=self.image_mas)
-                self.save_config()
-                self.save_coordinates()
-                return
-
-        # Si no hay estantería en esa posición
-        #messagebox.showwarning("Advertencia", "No existe una estantería en esta posición para eliminar.")
 
     def confirm_delete_shelf(self, y_pos):
         # Mostrar un cuadro de diálogo de confirmación antes de eliminar la estantería
@@ -177,6 +195,7 @@ class ShelfApp(tk.Tk):
         self.create_labels(shelf_data)
         self.save_config()
         self.save_coordinates()
+        self.vertical_profile()
 
     def remove_divider(self, event, shelf_data):
         # Eliminar un divisor al hacer clic derecho
@@ -243,9 +262,25 @@ class ShelfApp(tk.Tk):
             shelf_data["next_id"] += 1
 
     def save_config(self):
-        config = {"shelves": [{"y_pos": s["y_pos"], "values": s["values"]} for s in self.shelves]}
+        config = {"shelves": []}
+
+        for shelf in self.shelves:
+            
+            shelf_data = {
+                "y_pos": shelf["y_pos"],  # Guardar el valor modificado
+                "values": shelf["values"]
+            }
+
+            config["shelves"].append(shelf_data)
+
+        # Ordenar las estanterías por y_pos antes de guardar
+        config["shelves"].sort(key=lambda shelf: shelf["y_pos"])
+
         with open("config.json", "w") as f:
             json.dump(config, f, indent=4)
+
+        print("Configuración guardada en 'config.json'")
+
 
     def load_config(self):
         if not os.path.exists("config.json"):
@@ -282,9 +317,7 @@ class ShelfApp(tk.Tk):
             self.update_space_ids(shelf)
 
     def save_coordinates(self):
-
         coordinates = {"shelves": {}}
-        
 
         # Ordenar estanterías de arriba hacia abajo según la coordenada Z (y_pos)
         sorted_shelves = sorted(self.shelves, key=lambda s: s["y_pos"])
@@ -294,7 +327,12 @@ class ShelfApp(tk.Tk):
 
         for index, shelf in enumerate(sorted_shelves):  # Ahora está ordenado correctamente
             row_letter = row_labels[index]  # Asigna A, B, C... en orden de arriba hacia abajo
-            z_position = (index + 1) * 15  # Ahora los valores en Z serán 15, 30, 45, 60...
+
+            #print(f"Imprimo y_pos {shelf['y_pos']}")
+
+
+            # Recalcular la posición Z correctamente para cada estantería
+            z_position = (15 + ((shelf["y_pos"] - 50) / (1625 - 50)) * (120 - 15))-7.5
 
             coordinates["shelves"][row_letter] = {}
 
@@ -317,8 +355,11 @@ class ShelfApp(tk.Tk):
             json.dump(coordinates, f, indent=4)
 
         print("Coordenadas guardadas en 'coordinates.json'")
+        self.vertical_profile()
+
                 
 if __name__ == "__main__":
+    
     app = ShelfApp()
     app.mainloop()
 

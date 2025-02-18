@@ -4,6 +4,7 @@ import tkinter.ttk as ttk
 import time
 import json
 import os
+import string
 from gpiozero import PWMOutputDevice
 from tkinter import messagebox,simpledialog
 from tkinter import ttk, filedialog, simpledialog
@@ -1013,8 +1014,9 @@ class EasyPickApp:
             RPWM.value = 0
             LPWM.value = 1
             time.sleep(0.5)  
-        #print(f"Motor lineal alcanzó el final de carrera.")
+        print(f"Motor lineal alcanzó el final de carrera.")
         time.sleep(1)
+        return
     
     # Funciones de la opción finales de carrera
 
@@ -1057,10 +1059,10 @@ class EasyPickApp:
             # Función que actualiza la imagen sin parpadeo
             def actualizar_imagen():
                 # Comprobar el estado de los finales de carrera usando el método `esta_activado()`
-                if self.fc1_monitoreo.esta_activado():  # Usar esta_activado() en lugar de is_pressed
+                if not self.fc1_monitoreo.esta_activado():  # Usar esta_activado() en lugar de is_pressed
                     #print("FC1 activado")
                     imagen_original = Image.open("img/fc2.PNG")
-                elif self.fc2_monitoreo.esta_activado():
+                elif not self.fc2_monitoreo.esta_activado():
                     #print("FC2 activado")
                     imagen_original = Image.open("img/fc1.PNG")
                 elif self.fc3_monitoreo.esta_activado():
@@ -1109,6 +1111,7 @@ class EasyPickApp:
 
         self.shelves = []  # Lista de estanterías añadidas
         self.buttons = {}  # Diccionario de botones (óvalos)
+        self.move_x = 30
 
         # Crear el lienzo de guías
         self.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=0)
@@ -1120,43 +1123,70 @@ class EasyPickApp:
         # Ajustar el tamaño de la imagen
         self.image_mas = self.image_mas.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
         self.image_menos = self.image_menos.subsample(10, 10)  # Reduce el tamaño de la imagen (por ejemplo, 3x más pequeña)
-
-
-        self.create_vertical_guides()  # Crear las guías verticales
-
-        # Crear el lienzo principal para los soportes
-        self.main_canvas_1 = tk.Canvas(self.area_central, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_1.place(x=95, y=50)
-        self.main_canvas_2 = tk.Canvas(self.area_central, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_2.place(x=955, y=50)
-
+        
+        self.create_vertical_guides() 
         self.load_config()
+        self.vertical_profile()
 
     def create_vertical_guides(self):
-        # Crear los botones óvalos en la columna de la izquierda
-        for y in range(0, 105 + 1, 15):
-            y_pos = 50 + (y * 10)  # Calcular la posición Y de los óvalos
-            button = tk.Button(self.guides_canvas, 
-                                    image=self.image_mas, 
-                                    width=50, 
-                                    height=50, 
-                                    bg="white",
-                                    relief="flat", 
-                                    borderwidth=0)
-            button.place(x=20, y=y_pos)
-            button.config(command=lambda y_pos=y_pos: self.toggle_shelf(y_pos))
+        step = 5  # Espaciado cada 5 cm
+        min_spacing = 15+5  # Mínimo de 15 cm entre estanterías
 
+        for y in range(0, 105 + 1, step):  # Ahora iteramos cada 5 cm
+            y_pos = 50 + (y * 15)  # Calcular la posición en píxeles
+            
+            button = tk.Button(self.guides_canvas, 
+                            image=self.image_mas, 
+                            width=50, 
+                            height=50, 
+                            bg="white",
+                            relief="flat", 
+                            borderwidth=0)
+            button.place(x=20, y=y_pos)
+            
+            # Configurar comando para verificar la distancia antes de agregar estantería
+            button.config(command=lambda y_pos=y_pos: self.check_and_toggle_shelf(y_pos, min_spacing))
+            
             self.buttons[y_pos] = button  # Guardar el botón en el diccionario
+    
+    def check_and_toggle_shelf(self, y_pos, min_spacing):
+        existing_shelf = None
+        
+        for shelf in self.shelves:
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Si ya existe en la posición
+                existing_shelf = shelf
+                break
+
+        if existing_shelf:
+            self.confirm_delete_shelf(y_pos)  # Si la estantería ya existe, permitir eliminarla
+        else:
+            # Verificar distancia mínima solo al agregar
+            for shelf in self.shelves:
+                if abs(shelf["y_pos"] - y_pos) < min_spacing * 10:  # Convertir 15 cm a píxeles
+                    messagebox.showwarning("Advertencia", "Debe haber al menos 15 cm entre estanterías.")
+                    return
+            
+            self.add_shelf(y_pos)  # Si pasa la validación, agregar la estantería
 
     def toggle_shelf(self, y_pos):
-        # Verificar si ya existe una estantería en esa posición
+        # Buscar una estantería con margen de tolerancia debido al espaciado extra
         for shelf in self.shelves:
-            if shelf["y_pos"] == y_pos:
-                # Si hay una estantería, preguntamos si está seguro de eliminarla
-                self.confirm_delete_shelf(y_pos)
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Permite pequeña diferencia en píxeles
+                self.confirm_delete_shelf(shelf["y_pos"])
                 return
-        # Si no existe, agregamos una estantería
+        
         self.add_shelf(y_pos)
+
+    def delete_shelf(self, y_pos):
+        for shelf in self.shelves:
+            if abs(shelf["y_pos"] - y_pos) < 10:  # Permite margen de error
+                shelf["canvas"].destroy()
+                self.shelves.remove(shelf)
+                self.buttons[y_pos].config(image=self.image_mas)
+                self.save_config()
+                self.save_coordinates()
+                return
+
 
     def add_shelf(self, y_pos):
         # Verifica si ya existe una estantería en esa posición
@@ -1167,7 +1197,7 @@ class EasyPickApp:
 
         # Crear una nueva estantería
         shelf_canvas = tk.Canvas(self.area_central, width=900, height=150, bg="white",highlightthickness=0)
-        shelf_canvas.place(x=80, y=y_pos - 45)
+        shelf_canvas.place(x=+80+self.move_x, y=y_pos )
 
         # Configurar la estantería
         shelf_data = {
@@ -1196,41 +1226,25 @@ class EasyPickApp:
         self.create_guides(shelf_data)
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
+        self.vertical_profile()
         
-
         # Asignar eventos
         shelf_canvas.bind("<Double-Button-1>", lambda event, data=shelf_data: self.add_divider(event, data))
         shelf_canvas.bind("<Button-3>", lambda event, data=shelf_data: self.remove_divider(event, data))
 
         # Cambiar el color del botón a verde cuando haya una estantería
         self.buttons[y_pos].config(image=self.image_menos)
+        self.save_coordinates()
+
+    def vertical_profile(self):
 
         # Crear el lienzo principal para los soportes
-        self.main_canvas_1 = tk.Canvas(self.area_central, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_1.place(x=95, y=50)
-        self.main_canvas_2 = tk.Canvas(self.area_central, width=11, height=1200, bg="gray", highlightthickness=0)
-        self.main_canvas_2.place(x=955, y=50)
-
-        self.entry_separacion()
+        self.main_canvas_1 = tk.Canvas(self.area_central, width=11, height=1800, bg="gray", highlightthickness=0)
+        self.main_canvas_1.place(x=95+self.move_x, y=50)
+        self.main_canvas_2 = tk.Canvas(self.area_central, width=11, height=1800, bg="gray", highlightthickness=0)
+        self.main_canvas_2.place(x=955+self.move_x, y=50)
 
         self.save_config()
-
-
-
-    def delete_shelf(self, y_pos):
-        # Buscar si hay estantería en la posición y_pos
-        for shelf in self.shelves:
-            if shelf["y_pos"] == y_pos:
-                shelf["canvas"].destroy()
-                self.shelves.remove(shelf)
-
-                # Cambiar el color del botón a rojo cuando no haya estantería
-                self.buttons[y_pos].config(image=self.image_mas)
-                self.save_config()
-                return
-
-        # Si no hay estantería en esa posición
-        #messagebox.showwarning("Advertencia", "No existe una estantería en esta posición para eliminar.")
 
     def confirm_delete_shelf(self, y_pos):
         # Mostrar un cuadro de diálogo de confirmación antes de eliminar la estantería
@@ -1274,6 +1288,8 @@ class EasyPickApp:
         self.update_positions(shelf_data)
         self.create_labels(shelf_data)
         self.save_config()
+        self.save_coordinates()
+        self.vertical_profile()
 
     def remove_divider(self, event, shelf_data):
         # Eliminar un divisor al hacer clic derecho
@@ -1287,6 +1303,7 @@ class EasyPickApp:
                 del shelf_data["dividers"][i]
                 self.update_space_ids(shelf_data)
                 self.save_config()
+                self.save_coordinates()
                 return
         #messagebox.showwarning("Advertencia", "No se encontró un divisor en esta posición para eliminar")
 
@@ -1339,9 +1356,25 @@ class EasyPickApp:
             shelf_data["next_id"] += 1
 
     def save_config(self):
-        config = {"shelves": [{"y_pos": s["y_pos"], "values": s["values"]} for s in self.shelves]}
+        config = {"shelves": []}
+
+        for shelf in self.shelves:
+            
+            shelf_data = {
+                "y_pos": shelf["y_pos"],  # Guardar el valor modificado
+                "values": shelf["values"]
+            }
+
+            config["shelves"].append(shelf_data)
+
+        # Ordenar las estanterías por y_pos antes de guardar
+        config["shelves"].sort(key=lambda shelf: shelf["y_pos"])
+
         with open("config.json", "w") as f:
             json.dump(config, f, indent=4)
+
+        print("Configuración guardada en 'config.json'")
+
 
     def load_config(self):
         if not os.path.exists("config.json"):
@@ -1375,23 +1408,48 @@ class EasyPickApp:
 
             self.update_positions(shelf)
             self.create_labels(shelf)
-            self.update_space_ids(shelf)  
+            self.update_space_ids(shelf)
 
-    def entry_separacion(self):
+    def save_coordinates(self):
+        coordinates = {"shelves": {}}
 
-        # Crear y ubicar la etiqueta
-        tk.Label(
-                                        self.area_central,
-                                        text=f"Separación:  ",
-                                        bg="white",
-                                        font=self.fuente_2).place(x=100, y=1300)  # Coordenadas absolutas dentro del frame
+        # Ordenar estanterías de arriba hacia abajo según la coordenada Z (y_pos)
+        sorted_shelves = sorted(self.shelves, key=lambda s: s["y_pos"])
 
-        self.entrada_separacion = tk.Entry(self.area_central, 
-                                        width=10, 
-                                        justify="center")
-        self.entrada_separacion.insert(0, "15") 
-        self.entrada_separacion.place(x=250, y=1300)  # Coordenadas absolutas dentro del frame
+        # Generar letras A, B, C... para cada fila de estantería
+        row_labels = string.ascii_uppercase  # "A", "B", "C", ..., "Z"
 
+        for index, shelf in enumerate(sorted_shelves):  # Ahora está ordenado correctamente
+            row_letter = row_labels[index]  # Asigna A, B, C... en orden de arriba hacia abajo
+
+            #print(f"Imprimo y_pos {shelf['y_pos']}")
+
+
+            # Recalcular la posición Z correctamente para cada estantería
+            z_position = (15 + ((shelf["y_pos"] - 50) / (1625 - 50)) * (120 - 15))-7.5
+
+            coordinates["shelves"][row_letter] = {}
+
+            for i in range(len(shelf["values"]) - 1):
+                start = shelf["values"][i]
+                end = shelf["values"][i + 1]
+
+                # Calcular la coordenada X como la mitad entre dos separadores
+                x_center = (start + end) / 2
+
+                # Nombre del espacio: "A1", "A2", ..., "B1", "B2"...
+                space_name = f"{row_letter}{i + 1}"
+                coordinates["shelves"][row_letter][space_name] = {
+                    "x": x_center,
+                    "z": z_position
+                }
+
+        # Guardar en "coordinates.json"
+        with open("coordinates.json", "w") as f:
+            json.dump(coordinates, f, indent=4)
+
+        print("Coordenadas guardadas en 'coordinates.json'")
+        self.vertical_profile()
 
     #Funciones de la opcion inventario 
 
