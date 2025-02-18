@@ -943,7 +943,8 @@ class EasyPickApp:
         self.entrada_t.insert(0, "0.5") 
         self.entrada_t.place(x=450, y=450)  # Coordenadas absolutas dentro del frame
 
-        boton_expandir = tk.Button(self.canvas, 
+        boton_expandir = tk.Buttoself.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=1800)
+        self.guides_canvas.place(x=35, y=50)(self.canvas, 
                                         text="Expandir", 
                                         command=self.expandir_alineal,  # Función al presionar el botón
                                         bg="#00AADA", 
@@ -996,7 +997,8 @@ class EasyPickApp:
                 messagebox.showerror(title="Error de movimiento", message="El valor de tiempo  debe estar entre 0.1 y 10")
         else:
             print("error con el valor de la velocidad")
-            messagebox.showerror(title="Error de movimiento", message="El valor de velocidad  debe estar entre 0.1 y 1")
+            #messagebox.showerror(self.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=0)
+        #self.guides_canvas.place(x=35, y=50)title="Error de movimiento", message="El valor de velocidad  debe estar entre 0.1 y 1")
 
     def homing_lineal(self,final_carrera):
         """
@@ -1114,8 +1116,13 @@ class EasyPickApp:
         self.move_x = 30
 
         # Crear el lienzo de guías
-        self.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=0)
-        self.guides_canvas.pack(side=tk.LEFT, fill=tk.Y)
+        self.guides_canvas_est = tk.Canvas(self.area_central, 
+                                       width=80, 
+                                       height=1800, 
+                                       bg="white",
+                                       highlightthickness=0)
+        self.guides_canvas_est.place(x=35, y=50)  # Mueve el panel de guías más a la derecha
+        #self.guides_canvas.pack(side=tk.LEFT, fill=tk.Y)
 
         self.image_mas = tk.PhotoImage(file="img/mas.png")
         self.image_menos = tk.PhotoImage(file="img/menos.png")
@@ -1135,7 +1142,7 @@ class EasyPickApp:
         for y in range(0, 105 + 1, step):  # Ahora iteramos cada 5 cm
             y_pos = 50 + (y * 15)  # Calcular la posición en píxeles
             
-            button = tk.Button(self.guides_canvas, 
+            button = tk.Button(self.guides_canvas_est, 
                             image=self.image_mas, 
                             width=50, 
                             height=50, 
@@ -1187,7 +1194,6 @@ class EasyPickApp:
                 self.save_coordinates()
                 return
 
-
     def add_shelf(self, y_pos):
         # Verifica si ya existe una estantería en esa posición
         for shelf in self.shelves:
@@ -1197,7 +1203,7 @@ class EasyPickApp:
 
         # Crear una nueva estantería
         shelf_canvas = tk.Canvas(self.area_central, width=900, height=150, bg="white",highlightthickness=0)
-        shelf_canvas.place(x=+80+self.move_x, y=y_pos )
+        shelf_canvas.place(x=80+self.move_x, y=y_pos )
 
         # Configurar la estantería
         shelf_data = {
@@ -1373,8 +1379,7 @@ class EasyPickApp:
         with open("config.json", "w") as f:
             json.dump(config, f, indent=4)
 
-        print("Configuración guardada en 'config.json'")
-
+        #print("Configuración guardada en 'config.json'")
 
     def load_config(self):
         if not os.path.exists("config.json"):
@@ -1448,7 +1453,7 @@ class EasyPickApp:
         with open("coordinates.json", "w") as f:
             json.dump(coordinates, f, indent=4)
 
-        print("Coordenadas guardadas en 'coordinates.json'")
+        #print("Coordenadas guardadas en 'coordinates.json'")
         self.vertical_profile()
 
     #Funciones de la opcion inventario 
@@ -1740,6 +1745,6 @@ if __name__ == "__main__":
     root.attributes("-fullscreen", True)  # Inicia en pantalla completa
     root.bind("<F11>", lambda event: root.attributes("-fullscreen",not root.attributes("-fullscreen")))  # Alterna con F11
     root.bind("<Escape>", lambda event: root.attributes("-fullscreen", False))  # Sale con Escape
-
+    
     app = EasyPickApp(root)
     root.mainloop()
