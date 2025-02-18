@@ -20,7 +20,7 @@ def homing_motor(motor, final_carrera, direccion_inicial, velocidad, pasos_retro
     """
     #print(f"Iniciando homing...")
     motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
-    while not final_carrera.esta_activado():
+    while  final_carrera.esta_activado():
         motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
     #print(f"Motor alcanzó el final de carrera.")
 
@@ -67,23 +67,23 @@ def mover_a_coordenadas(motor1, motor2, coordenadas, posicion_motor1, posicion_m
             x=coord_m2
             
             # Tomar decisiones según las coordenadas
-            if x == 31:       #MADERA ARRIBA
+            if x == 1:       #MADERA ARRIBA
                 print("Acción 1: MADERA ARRIBA.")
                 roi_x, roi_y, roi_ancho, roi_alto = 97, 263, 256, 332
                 detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
                 break
-            elif x == 30:  #Lupa
+            elif x == 2:  #Lupa
                 print("Acción 3: Lupa.")
                 roi_x, roi_y, roi_ancho, roi_alto = 85, 209, 462, 240
                 detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
                 break
-            elif x == 45:          #Caja RASPBERRY
+            elif x == 3:          #Caja RASPBERRY
                 print("Acción 2: Caja RASPBERRY.")
                 roi_x, roi_y, roi_ancho, roi_alto = 151, 267, 270, 319
                 detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
                 break
             
-            elif x == 50:       # Madera abajo
+            elif x == 4:       # Madera abajo
                 print("Acción 4: Madera abajo.")
                 roi_x, roi_y, roi_ancho, roi_alto = 194, 216, 489, 302
                 detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
@@ -91,7 +91,7 @@ def mover_a_coordenadas(motor1, motor2, coordenadas, posicion_motor1, posicion_m
             
             else:
                 print("Acción por defecto: Coordenada fuera de rango.")
-                roi_x, roi_y, roi_ancho, roi_alto = 108, 297, 305, 376
+                roi_x, roi_y, roi_ancho, roi_alto = 112, 207, 414, 257
                 detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
                 break
     return posicion_motor1, posicion_motor2
@@ -115,13 +115,8 @@ def main():
 
 
             # Realizar homing inicial
-            #print("\nHoming del eyector...")
             homing_lineal(final3)
-
-            #print("\nHoming del motor horizontal...")
             homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0005, pasos_retroceso=500)
-
-            #print("\nHoming del motor vertical...")
             homing_motor(motor1, final1, direccion_inicial=0, velocidad=0.0005, pasos_retroceso=100)
 
             # Solicitar lista de coordenadas
@@ -131,7 +126,7 @@ def main():
 
             try:
                 #coordenadas = eval(coordenadas_input)  # Convertir la entrada en una lista de coordenadas
-                coordenadas = [(26, 31),(46, 30),(26, 45),(46, 50)]#(31, 31),(52, 30),(31, 45),(52, 50)
+                coordenadas = [(20,30),(20, 45),(40, 50),(40, 28)]#(31, 31),(52, 30),(31, 45),(52, 50)
                 #print(f"\nUsando coordenadas por defecto: {coordenadas}")
 
                 # Ordenar las coordenadas por z y luego por x
@@ -144,7 +139,7 @@ def main():
                 posicion_motor1, posicion_motor2 = mover_a_coordenadas(motor1, motor2, coordenadas_ordenadas, posicion_motor1, posicion_motor2,final3)
 
                 # Volver a home después de completar las coordenadas
-                #print("\nVolviendo a home...")
+                print("\nVolviendo a home...")
                 homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0005, pasos_retroceso=500)
                 homing_motor(motor1, final1, direccion_inicial=0, velocidad=0.0005, pasos_retroceso=100)
                 break
