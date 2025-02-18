@@ -75,7 +75,7 @@ def homing_motor(motor, final_carrera, direccion_inicial, velocidad, pasos_retro
     """
     print(f"Iniciando homing para {motor.nombre}...")
     motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
-    while not final_carrera.esta_activado():
+    while final_carrera.esta_activado():
         motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
     time.sleep(0.5)
 
