@@ -943,8 +943,7 @@ class EasyPickApp:
         self.entrada_t.insert(0, "0.5") 
         self.entrada_t.place(x=450, y=450)  # Coordenadas absolutas dentro del frame
 
-        boton_expandir = tk.Buttoself.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=1800)
-        self.guides_canvas.place(x=35, y=50)(self.canvas, 
+        boton_expandir = tk.Button(self.canvas, 
                                         text="Expandir", 
                                         command=self.expandir_alineal,  # Función al presionar el botón
                                         bg="#00AADA", 
@@ -997,8 +996,7 @@ class EasyPickApp:
                 messagebox.showerror(title="Error de movimiento", message="El valor de tiempo  debe estar entre 0.1 y 10")
         else:
             print("error con el valor de la velocidad")
-            #messagebox.showerror(self.guides_canvas = tk.Canvas(self.area_central, width=80, height=600, bg="white",highlightthickness=0)
-        #self.guides_canvas.place(x=35, y=50)title="Error de movimiento", message="El valor de velocidad  debe estar entre 0.1 y 1")
+            messagebox.showerror(title="Error de movimiento", message="El valor de velocidad  debe estar entre 0.1 y 1")
 
     def homing_lineal(self,final_carrera):
         """
