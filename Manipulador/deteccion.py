@@ -14,7 +14,7 @@ def homing_lineal(final_carrera):
     """
     Realiza el proceso de homing para ,motor lineal.
     """
-    #print(f"Iniciando homing del motor lineal")
+    print(f"Iniciando homing del motor lineal")
     RPWM.value = 0
     LPWM.value = 1
     time.sleep(0.5) 
@@ -22,9 +22,7 @@ def homing_lineal(final_carrera):
         RPWM.value = 0
         LPWM.value = 1
         time.sleep(0.5)  
-    #print(f"Motor lineal alcanzó el final de carrera.")
-    RPWM.value = 0
-    LPWM.value = 1
+    print(f"Motor lineal alcanzó el final de carrera.")
     time.sleep(1)
 
 def perfil_velocidad():
@@ -32,15 +30,15 @@ def perfil_velocidad():
     Realizando perfil de velocidad
     """
     velocidad = 1  # Velocidad inicial
-    decremento = 0.08  # Incremento por segundo
+    decremento = 0.1  # Incremento por segundo
 
     while not detener_hilo.is_set():  # Continúa mientras no se detenga el hilo
         RPWM.value = velocidad
         LPWM.value = 0
         #print(f"Velocidad actual: {RPWM.value}")
-        time.sleep(0.25)  # decrementa cada segundo
-        if velocidad <= 0.2:
-            velocidad=0.2
+        time.sleep(1)  # decrementa cada segundo
+        if velocidad <= 0.3:
+            velocidad=0.3
             #print("Velocidad fija en 0.2")
         else:
             velocidad -= decremento  # decrementa la velocidad
