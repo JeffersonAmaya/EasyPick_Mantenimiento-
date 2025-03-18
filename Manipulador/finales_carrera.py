@@ -13,4 +13,4 @@ class FinalDeCarrera:
         Verifica si el final de carrera está activado (envía un 0).
         :return: True si está activado, False en caso contrario.
         """
-        return self.line.get_value() == 0
+        return self.line.get_value() == 1
