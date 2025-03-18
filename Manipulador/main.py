@@ -44,7 +44,7 @@ def calcular_retardo_motor2(paso_actual, total_pasos, retardo_min=0.0004, retard
 # Función para realizar el homing
 def homing_motor(motor, final_carrera, direccion_inicial, velocidad, pasos_retroceso):
     print(f"Iniciando homing del ...")
-    motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
+    
     while not final_carrera.esta_activado():
         motor.mover(direccion=direccion_inicial, pasos=1, retardo=velocidad)
     print(f" alcanzó el final de carrera.")
@@ -87,78 +87,55 @@ def main():
     posicion_motor2 = 0  
 
     try:
-        while True:
-            homing_lineal(final3)
-            time.sleep(2.5)
-            homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
+        # Realizar el homing solo una vez
+        homing_lineal(final3)
+        time.sleep(2.5)
+        homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
+        time.sleep(1)
+        homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+        time.sleep(1)
+
+        coordenadas = [(0, 20), (26, 10), (52, 15), (78, 10)]
+        print(f"Procesando coordenadas: {coordenadas}")
+
+        for coord_m1, coord_m2 in coordenadas:
+            posicion_motor1 = mover_motor_a_posicion(motor1, posicion_motor1, coord_m1, M1_RANGO_MAX_CM, 0, 1, calcular_retardo_motor1)
             time.sleep(1)
-            homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+            posicion_motor2 = mover_motor_a_posicion(motor2, posicion_motor2, coord_m2, M2_RANGO_MAX_CM, 1, 0, calcular_retardo_motor2)
             time.sleep(1)
+            print(f"Posición alcanzada: Motor1={posicion_motor1} cm, Motor2={posicion_motor2} cm")
 
-            try:
-                coordenadas = [ (0,20), 
-                                (26,10)]
-
-                coordenadas_ordenadas = sorted(coordenadas)
-
-                print(f"Coordenadas ordenadas: {coordenadas_ordenadas}")
-
-                for coord_m1, coord_m2 in coordenadas_ordenadas:
-                    posicion_motor1 = mover_motor_a_posicion(motor1, posicion_motor1, coord_m1, M1_RANGO_MAX_CM, 0, 1, calcular_retardo_motor1)
-                    time.sleep(1)
-                    posicion_motor2 = mover_motor_a_posicion(motor2, posicion_motor2, coord_m2, M2_RANGO_MAX_CM, 1, 0, calcular_retardo_motor2)
-                    time.sleep(1)
-                    print(f"Posición alcanzada: Motor1={posicion_motor1} cm, Motor2={posicion_motor2} cm")
-                    
-                    for coord in coordenadas:
-                        #print(f"Procesando coordenada: x={coord_m1}, y={coord_m2}")
-                        z=coord_m1
-                        x=coord_m2
-                        
-                        # Tomar decisiones según las coordenadas
-                        if x == 1:       #MADERA ARRIBA
-                            print("Acción 1: MADERA ARRIBA.")
-                            roi_x, roi_y, roi_ancho, roi_alto = 97, 263, 256, 332
-                            detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
-                            break
-                        elif x == 2:  #Lupa
-                            print("Acción 3: Lupa.")
-                            roi_x, roi_y, roi_ancho, roi_alto = 85, 209, 462, 240
-                            detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
-                            break
-                        elif x == 3:          #Caja RASPBERRY
-                            print("Acción 2: Caja RASPBERRY.")
-                            roi_x, roi_y, roi_ancho, roi_alto = 151, 267, 270, 319
-                            detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
-                            break
-                        
-                        elif x == 4:       # Madera abajo
-                            print("Acción 4: Madera abajo.")
-                            roi_x, roi_y, roi_ancho, roi_alto = 194, 216, 489, 302
-                            detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
-                            break
-                        
-                        else:
-                            print("Accion por defecto: Coordenada fuera de rango.")
-                            roi_x, roi_y, roi_ancho, roi_alto = 112, 207, 414, 257
-                            detectar_movimiento(roi_x, roi_y, roi_ancho, roi_alto,final3)
-                            break
-                return posicion_motor1, posicion_motor2
-
-            except Exception as e:
-                print(f"Error al procesar las coordenadas: {e}")
-        
+            # Tomar decisiones según las coordenadas
+            # if coord_m2 == 1:
+            #     print("Acción 1: MADERA ARRIBA.")
+            #     detectar_movimiento(97, 263, 256)
+            # elif coord_m2 == 2:
+            #     print("Acción 2: Lupa.")
+            #     detectar_movimiento(85, 209, 462, 240, final3)
+            # elif coord_m2 == 3:
+            #     print("Acción 3: Caja RASPBERRY.")
+            #     detectar_movimiento(151, 267, 270, 319, final3)
+            # elif coord_m2 == 4:
+            #     print("Acción 4: Madera abajo.")
+            #     detectar_movimiento(194, 216, 489, 302, final3)
+            # else:
+            print("Acción por defecto: Coordenada fuera de rango.")
+            detectar_movimiento(final3)
 
     except KeyboardInterrupt:
         print("\n--------------Programa interrumpido manualmente.--------------")
 
     finally:
         print("\nVolviendo a home...")
-        homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
-        homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+        try:
+            homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
+            homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+        except Exception as e:
+            print(f"Error al volver a home: {e}")
+
         motor1.liberar()
         motor2.liberar()
-        print("Recursos liberados.")
+        print("Recursos liberados correctamente.")
 
 if __name__ == "__main__":
     main()

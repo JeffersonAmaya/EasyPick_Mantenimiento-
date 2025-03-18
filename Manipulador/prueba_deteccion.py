@@ -27,8 +27,7 @@ def homing_lineal(final_carrera):
         LPWM.value = 1
         time.sleep(0.5)  
     print(f"Motor lineal alcanzó el final de carrera.")
-    time.sleep(2)
-    
+    time.sleep(1)
 
 def perfil_velocidad():
     """
@@ -48,7 +47,7 @@ def perfil_velocidad():
         else:
             velocidad -= decremento  # decrementa la velocidad
 
-def detectar_movimiento(final3):
+def detectar_movimiento():
 
     global detener_hilo
     detener_hilo.clear()
@@ -70,7 +69,7 @@ def detectar_movimiento(final3):
         return
         
     # Área predeterminada (ajustar según tu cámara)
-    area_pts = np.array([(330, 124), (4, 92), (5, 122), (333, 137), (329, 127)])    
+    area_pts = np.array([(1, 304), (524, 223), (429, 211), (0, 257), (3, 302)])
     
     # Crear el sustractor de fondo
     try:
@@ -87,9 +86,9 @@ def detectar_movimiento(final3):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     
     # Contador de FPS
-    # fps_start_time = time.time()
-    # fps_counter = 0
-    # fps = 0
+    fps_start_time = time.time()
+    fps_counter = 0
+    fps = 0
     
     print("Detector de movimiento iniciado. Presiona 'ESC' para salir.")
     hilo_velocidad = threading.Thread(target=perfil_velocidad)
@@ -102,11 +101,11 @@ def detectar_movimiento(final3):
             break
         
         # Actualizar FPS
-        # fps_counter += 1
-        # if (time.time() - fps_start_time) > 1:
-        #     fps = fps_counter
-        #     fps_counter = 0
-        #     fps_start_time = time.time()
+        fps_counter += 1
+        if (time.time() - fps_start_time) > 1:
+            fps = fps_counter
+            fps_counter = 0
+            fps_start_time = time.time()
         
         # Convertir a escala de grises
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -137,13 +136,13 @@ def detectar_movimiento(final3):
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
                 texto_estado = "Estado: Alerta Movimiento Detectado!"
                 color = (0, 0, 255)
-                print("Movimiento detectado: Detener eyector.")
+                #print("Movimiento detectado: Detener eyector.")
                 detener_hilo.set()  # Detiene el hilo
                 hilo_velocidad.join()  # Espera a que termine el hilo
-                print("\nHoming del eyector...")
+                #print("\nHoming del eyector...")
                 homing_lineal(final3)
-                cap.release()
-                cv2.destroyAllWindows()
+                homing_lineal(final3)
+                homing_lineal(final3)
                 break
         
         # Dibujar contorno del área de interés
@@ -151,8 +150,8 @@ def detectar_movimiento(final3):
         cv2.putText(frame, texto_estado, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         
         # Mostrar FPS
-        # cv2.putText(frame, f"FPS: {fps}", (frame.shape[1] - 120, 30), 
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"FPS: {fps}", (frame.shape[1] - 120, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         # Mostrar imágenes
         cv2.imshow('Detector de Movimiento', frame)
