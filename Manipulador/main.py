@@ -11,7 +11,7 @@ def cm_a_pasos(coordenada_cm):
     return int(coordenada_cm * PASOS_POR_CM)
 
 # Funciones para los perfiles de velocidad
-def calcular_retardo_motor1(paso_actual, total_pasos, retardo_min=0.0003, retardo_max=0.001, porcentaje_aceleracion=0.2):
+def calcular_retardo_motor1(paso_actual, total_pasos, retardo_min=0.0004, retardo_max=0.001, porcentaje_aceleracion=0.1):
     umbral_aceleracion = int(total_pasos * porcentaje_aceleracion)
     umbral_desaceleracion = total_pasos - umbral_aceleracion
 
@@ -87,15 +87,19 @@ def main():
     posicion_motor2 = 0  
 
     try:
+        
         # Realizar el homing solo una vez
         homing_lineal(final3)
         time.sleep(2.5)
         homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
         time.sleep(1)
-        homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+        homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0008, pasos_retroceso=200)
         time.sleep(1)
 
-        coordenadas = [(0, 20), (26, 10), (52, 15), (78, 10)]
+        coordenadas = [ (0, 20) , (0, 40) , (0, 60) , (0, 80) ,
+                        (26, 20), (26, 40), (26, 60), (26, 80), 
+                        (52, 20), (52, 40), (52, 60), (52, 80),
+                        (78, 20), (78, 40), (78, 60), (78, 80)]
         print(f"Procesando coordenadas: {coordenadas}")
 
         for coord_m1, coord_m2 in coordenadas:
@@ -129,7 +133,7 @@ def main():
         print("\nVolviendo a home...")
         try:
             homing_motor(motor2, final2, direccion_inicial=0, velocidad=0.0003, pasos_retroceso=100)
-            homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0006, pasos_retroceso=200)
+            homing_motor(motor1, final1, direccion_inicial=1, velocidad=0.0008, pasos_retroceso=200)
         except Exception as e:
             print(f"Error al volver a home: {e}")
 

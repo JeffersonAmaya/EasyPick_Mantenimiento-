@@ -14,6 +14,14 @@ RPWM = PWMOutputDevice(18)
 LPWM = PWMOutputDevice(19)
 detener_hilo = threading.Event()
 
+def limpiar_pines():
+    """
+    Función para limpiar y liberar los pines GPIO
+    """
+    print("Limpiando configuración de pines GPIO...")
+    RPWM.value = 0
+    LPWM.value = 0
+
 def homing_lineal(final_carrera):
     """
     Realiza el proceso de homing para ,motor lineal.
@@ -27,6 +35,7 @@ def homing_lineal(final_carrera):
         LPWM.value = 1
         time.sleep(0.5)  
     print(f"Motor lineal alcanzó el final de carrera.")
+    limpiar_pines()
     time.sleep(2)
     
 
@@ -67,6 +76,7 @@ def detectar_movimiento(final3):
     ret, frame = cap.read()
     if not ret:
         print("Error: No se pudo capturar frame inicial.")
+        limpiar_pines()
         return
         
     # Área predeterminada (ajustar según tu cámara)
