@@ -80,8 +80,7 @@ def detectar_movimiento(final3):
         return
         
     # Área predeterminada (ajustar según tu cámara)
-    area_pts = np.array([(330, 124), (4, 92), (5, 122), (333, 137), (329, 127)])    
-    
+    area_pts = np.array([(165, 193), (632, 266), (622, 362), (169, 256), (163, 195)])
     # Crear el sustractor de fondo
     try:
         # Primero intentar con cv2.bgsegm
