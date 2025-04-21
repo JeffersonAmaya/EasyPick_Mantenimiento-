@@ -2,9 +2,11 @@ import serial
 import time
 import numpy as np
 import cv2
+import os
+import subprocess
 
 # Configuración del puerto
-PORT = 'COM5'
+PORT = '/dev/ttyUSB0'
 BAUDRATE = 115200
 TIMEOUT = 2
 
@@ -16,9 +18,23 @@ HEADER_SIZE = 16
 # Región de interés (polígono)
 roi_pts = np.array([(62, 98), (72, 97), (85, 51), (77, 51)], dtype=np.int32)
 
-# Parámetros de sensibilidad
-DIFF_THRESHOLD = 95
-PIXEL_CHANGE_LIMIT = 30
+# Sensibilidad
+DIFF_THRESHOLD = 30
+PIXEL_CHANGE_LIMIT = 20
+STABLE_FRAMES_REQUIRED = 5
+
+def liberar_puerto(port):
+    try:
+        output = subprocess.check_output(['lsof', port])
+        lines = output.decode().split('\n')[1:]
+        for line in lines:
+            if line:
+                pid = int(line.split()[1])
+                print(f"🔴 Matando proceso que usa {port} con PID {pid}")
+                os.kill(pid, 9)
+        print(f"✅ Puerto {port} liberado.")
+    except subprocess.CalledProcessError:
+        print(f"✅ Puerto {port} no está en uso.")
 
 def send_commands(ser):
     commands = [
@@ -52,46 +68,76 @@ def read_depth_frame(ser):
     return None
 
 def main():
-    with serial.Serial(PORT, BAUDRATE, timeout=TIMEOUT) as ser:
-        print("Iniciando sensor de profundidad...")
-        send_commands(ser)
-        print("Capturando frame de referencia...")
-        ref_frame = read_depth_frame(ser)
+    liberar_puerto(PORT)  # 🔧 Intentar liberar el puerto antes de abrirlo
 
-        mask_roi = get_mask_from_polygon(ref_frame.shape, roi_pts)
+    try:
+        with serial.Serial(PORT, BAUDRATE, timeout=TIMEOUT) as ser:
+            print("Iniciando sensor de profundidad...")
+            send_commands(ser)
 
-        print("Monitoreando movimiento... (ESC para salir)")
-        while True:
-            frame = read_depth_frame(ser)
+            print("Esperando que la escena esté estable...")
 
-            # Aplicar máscara ROI
-            roi_ref = cv2.bitwise_and(ref_frame, ref_frame, mask=mask_roi)
-            roi_now = cv2.bitwise_and(frame, frame, mask=mask_roi)
+            stable_count = 0
+            last_frame = None
 
-            # Diferencia y conteo de pixeles modificados
-            diff = cv2.absdiff(roi_ref, roi_now)
-            _, diff_thresh = cv2.threshold(diff, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-            num_changes = cv2.countNonZero(diff_thresh)
+            while stable_count < STABLE_FRAMES_REQUIRED:
+                frame = read_depth_frame(ser)
+                frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
 
-            movement_detected = num_changes > PIXEL_CHANGE_LIMIT
+                if last_frame is None:
+                    last_frame = frame_blur
+                    continue
 
-            # Imagen original en color + polígono
-            img_color = cv2.applyColorMap(frame, cv2.COLORMAP_TURBO)
-            cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
+                diff = cv2.absdiff(last_frame, frame_blur)
+                diff_mask = get_mask_from_polygon(diff.shape, roi_pts)
+                diff_roi = cv2.bitwise_and(diff, diff, mask=diff_mask)
+                _, diff_thresh = cv2.threshold(diff_roi, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+                changes = cv2.countNonZero(diff_thresh)
 
-            if movement_detected:
-                cv2.putText(img_color, "CAMBIO DETECTADO", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-                cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                if changes < PIXEL_CHANGE_LIMIT:
+                    stable_count += 1
+                    print(f"Frame estable {stable_count}/{STABLE_FRAMES_REQUIRED}")
+                else:
+                    print(f"⚠️ Movimiento detectado durante inicialización ({changes} cambios)")
+                    stable_count = 0
 
-            # Escalado para mejor visualización
-            img_display = cv2.resize(img_color, (FRAME_WIDTH * 4, FRAME_HEIGHT * 4), interpolation=cv2.INTER_NEAREST)
+                last_frame = frame_blur
 
-            cv2.imshow("Vista con Poligono", img_display)
+            ref_frame = last_frame
+            mask_roi = get_mask_from_polygon(ref_frame.shape, roi_pts)
 
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
+            print("Monitoreando movimiento... (ESC para salir)")
 
-        cv2.destroyAllWindows()
+            while True:
+                frame = read_depth_frame(ser)
+                frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
+
+                roi_ref = cv2.bitwise_and(ref_frame, ref_frame, mask=mask_roi)
+                roi_now = cv2.bitwise_and(frame_blur, frame_blur, mask=mask_roi)
+
+                diff = cv2.absdiff(roi_ref, roi_now)
+                _, diff_thresh = cv2.threshold(diff, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+                num_changes = cv2.countNonZero(diff_thresh)
+
+                movement_detected = num_changes > PIXEL_CHANGE_LIMIT
+
+                img_color = cv2.applyColorMap(frame, cv2.COLORMAP_TURBO)
+                cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
+
+                if movement_detected:
+                    cv2.putText(img_color, "CAMBIO DETECTADO", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                    cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+
+                img_display = cv2.resize(img_color, (FRAME_WIDTH * 4, FRAME_HEIGHT * 4), interpolation=cv2.INTER_NEAREST)
+                cv2.imshow("Vista con Poligono", img_display)
+
+                if cv2.waitKey(1) & 0xFF == 27:
+                    break
+
+            cv2.destroyAllWindows()
+
+    except Exception as e:
+        print(f"❌ Error al abrir el puerto serial: {e}")
 
 if __name__ == "__main__":
     main()

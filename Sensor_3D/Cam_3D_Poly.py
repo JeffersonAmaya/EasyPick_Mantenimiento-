@@ -3,7 +3,7 @@ import time
 import numpy as np
 import cv2
 
-PORT = 'COM5'
+PORT = '/dev/ttyUSB0' 
 BAUDRATE = 115200
 TIMEOUT = 2
 
