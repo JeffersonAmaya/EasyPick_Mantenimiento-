@@ -6,7 +6,7 @@ import os
 import subprocess
 
 # Configuración del puerto
-PORT = '/dev/ttyUSB0'
+PORT = '/dev/ttyUSB1'
 BAUDRATE = 115200
 TIMEOUT = 2
 
