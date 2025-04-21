@@ -96,8 +96,8 @@ def mover_motores(coordenadas, detener_callback,fc1,fc2,fc3,ejecutar):
     global detener_ejecucion
     
     # Crear instancias de los motores y finales de carrera
-    motor1 = MotorNema(2, 3, "Motor1")
-    motor2 = MotorNema(4, 5, "Motor2")
+    motor1 = MotorNema(3, 2, "Motor1")
+    motor2 = MotorNema(5, 4, "Motor2")
     final1 = fc1
     final2 = fc2
     final3 = fc3

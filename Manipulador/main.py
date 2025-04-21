@@ -1,18 +1,13 @@
 from motores import MotorNema
 from finales_carrera import FinalDeCarrera
-from deteccion import detectar_movimiento#, homing_lineal
+from deteccion import detectar_movimiento
 import threading
 import time
 import math
-from gpiozero import PWMOutputDevice
 
 PASOS_POR_CM = 100  
 M1_RANGO_MAX_CM = 100
 M2_RANGO_MAX_CM = 100
-
-# Configuración de los pines
-RPWM = PWMOutputDevice(19)
-LPWM = PWMOutputDevice(18)
 
 def calcular_distancia(punto1, punto2):
     """Calcula la distancia euclidiana entre dos puntos."""
@@ -93,11 +88,11 @@ def main():
     motor1 = MotorNema(3, 2, "Motor1")
     motor2 = MotorNema(5, 4, "Motor2")
 
-    final1 = FinalDeCarrera(8, "Final1")
+    final1 = FinalDeCarrera(6, "Final1")
     final2 = FinalDeCarrera(7, "Final2")
-    final3 = FinalDeCarrera(6, "Final3")
+    final3 = FinalDeCarrera(8, "Final3")
 
-    coordenadas = [ (0, 20) , (26, 40) , (52, 60)] 
+    coordenadas = [ (0, 20) , (26, 40) , (52, 60) , (78, 80)] 
                     # (26, 20), (26, 40), (26, 60), (26, 80), 
                     # (52, 20), (52, 40), (52, 60), (52, 80),
                     # (78, 20), (78, 40), (78, 60), (78, 80)]
@@ -107,10 +102,6 @@ def main():
     print("Ruta optimizada:", coordenadas_optimizadas)
 
     try:
-
-        extender_actuador(1)  # Extiende con 50% de velocidad
-        time.sleep(1)
-        parar_actuador()
         # Realizar homing en paralelo
         homing_en_paralelo(motor1, motor2, final1, final2, final3)
         
@@ -161,43 +152,6 @@ def main():
         motor1.liberar()
         motor2.liberar()
         print("Recursos liberados correctamente.")
-        
-        retraer_actuador(1)  # Retrae con 70% de velocidad
-        parar_actuador()
-        time.sleep(6)
-        extender_actuador(1)  # Extiende con 50% de velocidad
-        time.sleep(1)
-        parar_actuador()
-
-def extender_actuador(velocidad):
-    """
-    Extiende el actuador lineal.
-    :param velocidad: Velocidad de extensión (0.0 a 1.0).
-    """
-    print(f"Extendiendo actuador con velocidad {velocidad}")
-    RPWM.value = velocidad
-    LPWM.value = 0
-    time.sleep(5)  # Ajusta el tiempo según lo necesario
-    parar_actuador()
-
-def retraer_actuador(velocidad):
-    """
-    Retrae el actuador lineal.
-    :param velocidad: Velocidad de retracción (0.0 a 1.0).
-    """
-    print(f"Retrayendo actuador con velocidad {velocidad}")
-    RPWM.value = 0
-    LPWM.value = velocidad
-    time.sleep(1.8)  # Ajusta el tiempo según lo necesario
-    parar_actuador()
-
-def parar_actuador():
-    """
-    Detiene el actuador lineal.
-    """
-    print("Deteniendo actuador")
-    RPWM.off()
-    LPWM.off()
 
 # Incluir las funciones de cálculo de retardo y movimiento del script anterior
 def cm_a_pasos(coordenada_cm):
