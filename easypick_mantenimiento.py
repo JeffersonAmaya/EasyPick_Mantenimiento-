@@ -56,9 +56,9 @@ class EasyPickApp:
 
 
         # Crear los finales de carrera
-        self.fc1 = FinalDeCarrera(6, "Final1")
+        self.fc1 = FinalDeCarrera(8, "Final1")
         self.fc2 = FinalDeCarrera(7, "Final2")
-        self.fc3 = FinalDeCarrera(8, "Final3")
+        self.fc3 = FinalDeCarrera(6, "Final3")
 
     def detener_hilo_limpiar(self):
         # Detener los hilos

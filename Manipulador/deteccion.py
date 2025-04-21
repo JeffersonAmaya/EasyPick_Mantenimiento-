@@ -10,57 +10,57 @@ from tkinter import Tk
 
 
 # Configuración de los pines
-RPWM = PWMOutputDevice(18)
-LPWM = PWMOutputDevice(19)
-detener_hilo = threading.Event()
+# RPWM = PWMOutputDevice(19)
+# LPWM = PWMOutputDevice(18)
+# detener_hilo = threading.Event()
 
-def limpiar_pines():
-    """
-    Función para limpiar y liberar los pines GPIO
-    """
-    print("Limpiando configuración de pines GPIO...")
-    RPWM.value = 0
-    LPWM.value = 0
+# def limpiar_pines():
+#     """
+#     Función para limpiar y liberar los pines GPIO
+#     """
+#     print("Limpiando configuración de pines GPIO...")
+#     RPWM.value = 0
+#     LPWM.value = 0
 
-def homing_lineal(final_carrera):
-    """
-    Realiza el proceso de homing para ,motor lineal.
-    """
-    print(f"Iniciando homing del motor lineal")
-    RPWM.value = 0
-    LPWM.value = 1
-    time.sleep(0.5) 
-    while not final_carrera.esta_activado():
-        RPWM.value = 0
-        LPWM.value = 1
-        time.sleep(0.5)  
-    print(f"Motor lineal alcanzó el final de carrera.")
-    limpiar_pines()
-    time.sleep(2)
+# def homing_lineal(final_carrera):
+#     """
+#     Realiza el proceso de homing para ,motor lineal.
+#     """
+#     print(f"Iniciando homing del motor lineal")
+#     RPWM.value = 0
+#     LPWM.value = 1
+#     time.sleep(0.5) 
+#     while not final_carrera.esta_activado():
+#         RPWM.value = 0
+#         LPWM.value = 1
+#         time.sleep(0.5)  
+#     print(f"Motor lineal alcanzó el final de carrera.")
+#     limpiar_pines()
+#     time.sleep(2)
     
 
-def perfil_velocidad():
-    """
-    Realizando perfil de velocidad
-    """
-    velocidad = 1  # Velocidad inicial
-    decremento = 0.1  # Incremento por segundo
+# def perfil_velocidad():
+#     """
+#     Realizando perfil de velocidad
+#     """
+#     velocidad = 1  # Velocidad inicial
+#     decremento = 0.1  # Incremento por segundo
 
-    while not detener_hilo.is_set():  # Continúa mientras no se detenga el hilo
-        RPWM.value = velocidad
-        LPWM.value = 0
-        #print(f"Velocidad actual: {RPWM.value}")
-        time.sleep(1)  # decrementa cada segundo
-        if velocidad <= 0.3:
-            velocidad=0.3
-            #print("Velocidad fija en 0.2")
-        else:
-            velocidad -= decremento  # decrementa la velocidad
+#     while not detener_hilo.is_set():  # Continúa mientras no se detenga el hilo
+#         RPWM.value = velocidad
+#         LPWM.value = 0
+#         #print(f"Velocidad actual: {RPWM.value}")
+#         time.sleep(1)  # decrementa cada segundo
+#         if velocidad <= 0.3:
+#             velocidad=0.3
+#             #print("Velocidad fija en 0.2")
+#         else:
+#             velocidad -= decremento  # decrementa la velocidad
 
 def detectar_movimiento(final3):
 
-    global detener_hilo
-    detener_hilo.clear()
+    # global detener_hilo
+    # detener_hilo.clear()
     
     # Reducir resolución para mejor rendimiento en Raspberry Pi
     cap = cv2.VideoCapture(0)
@@ -74,11 +74,6 @@ def detectar_movimiento(final3):
     
     # Obtener un frame para determinar las dimensiones
     ret, frame = cap.read()
-    if not ret:
-        print("Error: No se pudo capturar frame inicial.")
-        limpiar_pines()
-        return
-        
     # Área predeterminada (ajustar según tu cámara)
     area_pts = np.array([(165, 193), (632, 266), (622, 362), (169, 256), (163, 195)])
     # Crear el sustractor de fondo
@@ -100,9 +95,9 @@ def detectar_movimiento(final3):
     # fps_counter = 0
     # fps = 0
     
-    print("Detector de movimiento iniciado. Presiona 'ESC' para salir.")
-    hilo_velocidad = threading.Thread(target=perfil_velocidad)
-    hilo_velocidad.start()
+    # print("Detector de movimiento iniciado. Presiona 'ESC' para salir.")
+    # hilo_velocidad = threading.Thread(target=perfil_velocidad)
+    # hilo_velocidad.start()
     
     while True:
         ret, frame = cap.read()
@@ -146,11 +141,9 @@ def detectar_movimiento(final3):
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
                 texto_estado = "Estado: Alerta Movimiento Detectado!"
                 color = (0, 0, 255)
-                print("Movimiento detectado: Detener eyector.")
-                detener_hilo.set()  # Detiene el hilo
-                hilo_velocidad.join()  # Espera a que termine el hilo
-                print("\nHoming del eyector...")
-                homing_lineal(final3)
+                # print("Movimiento detectado: Detener eyector.")
+                # detener_hilo.set()  # Detiene el hilo
+                # hilo_velocidad.join()  # Espera a que termine el hilo
                 cap.release()
                 cv2.destroyAllWindows()
                 break
