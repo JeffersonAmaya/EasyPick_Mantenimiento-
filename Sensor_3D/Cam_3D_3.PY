@@ -6,7 +6,7 @@ import os
 import subprocess
 
 # Configuración del puerto
-PORT = '/dev/ttyUSB1'
+PORT = '/dev/ttyUSB0'
 BAUDRATE = 115200
 TIMEOUT = 2
 
@@ -16,7 +16,7 @@ FRAME_SIZE = FRAME_WIDTH * FRAME_HEIGHT
 HEADER_SIZE = 16
 
 # Región de interés (polígono)
-roi_pts = np.array([(62, 98), (72, 97), (85, 51), (77, 51)], dtype=np.int32)
+roi_pts = np.array([(63, 47), (51, 95), (60, 93), (69, 49)], dtype=np.int32)
 
 # Sensibilidad
 DIFF_THRESHOLD = 30
@@ -68,7 +68,7 @@ def read_depth_frame(ser):
     return None
 
 def main():
-    liberar_puerto(PORT)  # 🔧 Intentar liberar el puerto antes de abrirlo
+    liberar_puerto(PORT)
 
     try:
         with serial.Serial(PORT, BAUDRATE, timeout=TIMEOUT) as ser:
@@ -121,18 +121,21 @@ def main():
 
                 movement_detected = num_changes > PIXEL_CHANGE_LIMIT
 
-                img_color = cv2.applyColorMap(frame, cv2.COLORMAP_TURBO)
-                cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
+                img_gray = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                cv2.polylines(img_gray, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
 
                 if movement_detected:
-                    cv2.putText(img_color, "CAMBIO DETECTADO", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-                    cv2.polylines(img_color, [roi_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                    cv2.putText(img_gray, "CAMBIO DETECTADO", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                    cv2.polylines(img_gray, [roi_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                    print("movimiento detectado")
 
-                img_display = cv2.resize(img_color, (FRAME_WIDTH * 4, FRAME_HEIGHT * 4), interpolation=cv2.INTER_NEAREST)
-                cv2.imshow("Vista con Poligono", img_display)
+                img_display = cv2.resize(img_gray, (FRAME_WIDTH * 2, FRAME_HEIGHT * 2), interpolation=cv2.INTER_NEAREST)
+                cv2.imshow("Vista Blanco y Negro", img_display)
 
                 if cv2.waitKey(1) & 0xFF == 27:
                     break
+
+                time.sleep(0.01)  # Alivia carga del CPU
 
             cv2.destroyAllWindows()
 

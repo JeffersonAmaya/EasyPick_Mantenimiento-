@@ -3,7 +3,7 @@ import time
 import numpy as np
 import cv2
 
-PORT = '/dev/ttyUSB0' 
+PORT = '/dev/ttyUSB0'
 BAUDRATE = 115200
 TIMEOUT = 2
 
@@ -90,35 +90,36 @@ def visualizar_con_dibujo(ser):
             if len(frame_data) >= HEADER_SIZE + FRAME_SIZE:
                 frame_body = frame_data[HEADER_SIZE:HEADER_SIZE + FRAME_SIZE]
                 img_gray = np.frombuffer(frame_body, dtype=np.uint8).reshape((FRAME_HEIGHT, FRAME_WIDTH))
-                img_color = cv2.applyColorMap(img_gray, cv2.COLORMAP_TURBO)
-                img_color_big = cv2.resize(img_color, (FRAME_WIDTH*SCALE, FRAME_HEIGHT*SCALE), interpolation=cv2.INTER_NEAREST)
+
+                # Mostrar imagen en blanco y negro
+                img_gray_big = cv2.resize(img_gray, (FRAME_WIDTH * SCALE, FRAME_HEIGHT * SCALE), interpolation=cv2.INTER_NEAREST)
 
                 # Dibujar puntos y líneas del polígono
                 if dibujador.puntos:
                     for i, punto in enumerate(dibujador.puntos):
                         px, py = punto
-                        cv2.circle(img_color_big, (px*SCALE, py*SCALE), 5, (0, 255, 0), -1)
-                        cv2.putText(img_color_big, f"{i+1}", (px*SCALE+5, py*SCALE-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+                        cv2.circle(img_gray_big, (px*SCALE, py*SCALE), 5, (255, 255, 255), -1)
+                        cv2.putText(img_gray_big, f"{i+1}", (px*SCALE+5, py*SCALE-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
 
                     # Dibujar líneas entre puntos
                     for i in range(len(dibujador.puntos) - 1):
                         pt1 = tuple(np.array(dibujador.puntos[i]) * SCALE)
                         pt2 = tuple(np.array(dibujador.puntos[i+1]) * SCALE)
-                        cv2.line(img_color_big, pt1, pt2, (255, 0, 0), 2)
+                        cv2.line(img_gray_big, pt1, pt2, (255, 255, 255), 2)
 
                     # Cerrar y rellenar si ya está completo
                     if dibujador.poligono_completado:
                         pt1 = tuple(np.array(dibujador.puntos[-1]) * SCALE)
                         pt2 = tuple(np.array(dibujador.puntos[0]) * SCALE)
-                        cv2.line(img_color_big, pt1, pt2, (255, 0, 0), 2)
+                        cv2.line(img_gray_big, pt1, pt2, (255, 255, 255), 2)
 
-                        overlay = img_color_big.copy()
+                        overlay = img_gray_big.copy()
                         puntos = np.array(dibujador.puntos, np.int32).reshape((-1, 1, 2)) * SCALE
-                        cv2.fillPoly(overlay, [puntos], (0, 0, 255))
+                        cv2.fillPoly(overlay, [puntos], (255, 255, 255))
                         alpha = 0.3
-                        img_color_big = cv2.addWeighted(overlay, alpha, img_color_big, 1 - alpha, 0)
+                        img_gray_big = cv2.addWeighted(overlay, alpha, img_gray_big, 1 - alpha, 0)
 
-                cv2.imshow("Sensor con Dibujo", img_color_big)
+                cv2.imshow("Sensor con Dibujo", img_gray_big)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:  # ESC
