@@ -1,18 +1,14 @@
-from motores import MotorNema
-from finales_carrera import FinalDeCarrera
-import threading
+import serial
 import time
-import math
 import cv2
 import numpy as np
-import serial
-from gpiozero import PWMOutputDevice
 import os
 import subprocess
 import glob
+from gpiozero import PWMOutputDevice
 
 # Configuración del sensor A010
-SER = None  # Variable global para la conexión serial
+SENSORES = []  # Lista para almacenar múltiples sensores
 BAUDRATE = 115200
 TIMEOUT = 2
 FRAME_WIDTH = 100
@@ -21,468 +17,370 @@ FRAME_SIZE = FRAME_WIDTH * FRAME_HEIGHT
 HEADER_SIZE = 16
 DIFF_THRESHOLD = 30
 PIXEL_CHANGE_LIMIT = 20
-PASOS_POR_CM = 100  
-M1_RANGO_MAX_CM = 100
-M2_RANGO_MAX_CM = 100
-detener_hilo = threading.Event()
-MAX_INTENTOS_ESTABILIZACION = 10  # Número máximo de intentos para estabilizar el sensor
+MAX_INTENTOS_ESTABILIZACION = 10
+MAX_INTENTOS_LECTURA = 5
 
 # Configuración de los pines
 RPWM = PWMOutputDevice(19)
 LPWM = PWMOutputDevice(18)
 
+class SensorA010:
+    """
+    Clase para manejar el sensor A010 individualmente
+    """
+    def __init__(self, puerto, id_sensor=0):
+        self.puerto = puerto
+        self.id_sensor = id_sensor
+        self.ser = None
+        self.ultima_lectura = time.time()
+        self.frames_leidos = 0
+        self.frames_fallidos = 0
+        self.conectado = False
+        
+    def inicializar(self):
+        """
+        Inicializa la conexión con el sensor
+        """
+        try:
+            # Cerrar si ya está abierto
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+            
+            # Liberar el puerto por si está en uso
+            try:
+                output = subprocess.check_output(['lsof', self.puerto])
+                lines = output.decode().split('\n')[1:]
+                for line in lines:
+                    if line:
+                        pid = int(line.split()[1])
+                        print(f"Liberando puerto {self.puerto} (PID {pid})")
+                        os.kill(pid, 9)
+            except:
+                pass
+                
+            # Abrir conexión serial
+            self.ser = serial.Serial(self.puerto, BAUDRATE, timeout=TIMEOUT)
+            print(f"Sensor {self.id_sensor} inicializado en puerto {self.puerto}.")
+            
+            # Limpiar buffer
+            self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
+            
+            # Esperar un momento para estabilizar la conexión
+            time.sleep(0.5)
+            
+            # Enviar comandos de configuración con verificación
+            comandos = [
+                (b'AT+BAUD=5\r', b'OK'),
+                (b'AT+PC=1\r', b'OK'),
+                (b'AT+VIDEO=1\r', b'OK'),
+                (b'AT+ISP=1\r', b'OK'),
+                (b'AT+DISP=3\r', b'OK')
+            ]
+            
+            for cmd, resp_esperada in comandos:
+                for intento in range(3):  # Intentar 3 veces cada comando
+                    self.ser.write(cmd)
+                    time.sleep(0.3)
+                    respuesta = self.ser.read_all()
+                    if resp_esperada in respuesta:
+                        print(f"Comando {cmd} ejecutado correctamente en sensor {self.id_sensor}")
+                        break
+                    else:
+                        print(f"Intento {intento+1}: Comando {cmd} no confirmado. Reintentando...")
+                        time.sleep(0.2)
+            
+            # Verificar la conexión leyendo algunos frames de prueba
+            self.conectado = self.verificar_conexion()
+            return self.conectado
+            
+        except Exception as e:
+            print(f"Error al inicializar el sensor {self.id_sensor} en {self.puerto}: {e}")
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+            self.conectado = False
+            return False
+    
+    def verificar_conexion(self):
+        """
+        Verifica que el sensor esté respondiendo correctamente
+        """
+        print(f"Verificando conexión del sensor {self.id_sensor}...")
+        frames_ok = 0
+        max_intentos = 10
+        
+        for i in range(max_intentos):
+            frame = self.leer_frame()
+            if frame is not None:
+                frames_ok += 1
+                if frames_ok >= 3:  # Si tenemos 3 frames válidos, consideramos que está conectado
+                    print(f"Conexión verificada para sensor {self.id_sensor}. ({frames_ok}/{max_intentos} frames OK)")
+                    return True
+            time.sleep(0.1)
+        
+        print(f"No se pudo verificar la conexión del sensor {self.id_sensor}. Solo {frames_ok}/{max_intentos} frames fueron válidos.")
+        return False
+    
+    def leer_frame(self):
+        """
+        Lee un frame del sensor con reintento y diagnóstico
+        """
+        if not self.ser or not self.ser.is_open:
+            return None
+            
+        try:
+            # Actualizar estadísticas
+            self.ultima_lectura = time.time()
+            
+            # Establecer timeout para evitar bloqueos
+            timeout = time.time() + 2
+            
+            # Limpiar buffer si ha pasado tiempo desde la última lectura
+            if self.frames_leidos % 10 == 0:  # Cada 10 frames
+                self.ser.reset_input_buffer()
+                
+            while time.time() < timeout:
+                try:
+                    # Leer el encabezado
+                    header = self.ser.read(2)
+                    if len(header) < 2:
+                        continue
+                        
+                    if header == b'\x00\xff':
+                        # Leer el tamaño del paquete
+                        length_bytes = self.ser.read(2)
+                        if len(length_bytes) < 2:
+                            continue
+                        frame_len = int.from_bytes(length_bytes, 'little')
+                        
+                        # Verificar que el tamaño sea razonable
+                        if frame_len < HEADER_SIZE or frame_len > 20000:
+                            print(f"Tamaño de frame inválido: {frame_len}")
+                            continue
+                        
+                        # Leer el resto del paquete
+                        frame_data = self.ser.read(frame_len)
+                        if len(frame_data) >= HEADER_SIZE + FRAME_SIZE:
+                            frame_body = frame_data[HEADER_SIZE:HEADER_SIZE + FRAME_SIZE]
+                            self.frames_leidos += 1
+                            
+                            # Convertir a imagen numpy
+                            frame = np.frombuffer(frame_body, dtype=np.uint8).reshape((FRAME_HEIGHT, FRAME_WIDTH))
+                            
+                            # Verificar que el frame es válido (no todo negro o blanco)
+                            if np.mean(frame) > 5 and np.mean(frame) < 250:
+                                return frame
+                            else:
+                                print(f"Frame descartado: valores anómalos (media={np.mean(frame):.2f})")
+                                self.frames_fallidos += 1
+                                
+                except serial.SerialException as se:
+                    print(f"Error de comunicación serial en sensor {self.id_sensor}: {se}")
+                    self.frames_fallidos += 1
+                    break
+            
+            # Si llegamos aquí, no se pudo leer un frame válido
+            self.frames_fallidos += 1
+            return None
+            
+        except Exception as e:
+            print(f"Error al leer frame del sensor {self.id_sensor}: {e}")
+            self.frames_fallidos += 1
+            return None
+    
+    def cerrar(self):
+        """
+        Cierra la conexión del sensor
+        """
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+                print(f"Sensor {self.id_sensor} en puerto {self.puerto} cerrado correctamente.")
+            self.conectado = False
+        except Exception as e:
+            print(f"Error al cerrar el sensor {self.id_sensor}: {e}")
+    
+    def obtener_estado(self):
+        """
+        Devuelve un resumen del estado del sensor
+        """
+        error_rate = 0
+        if (self.frames_leidos + self.frames_fallidos) > 0:
+            error_rate = self.frames_fallidos / (self.frames_leidos + self.frames_fallidos) * 100
+            
+        return {
+            "id": self.id_sensor,
+            "puerto": self.puerto,
+            "conectado": self.conectado,
+            "frames_leidos": self.frames_leidos,
+            "frames_fallidos": self.frames_fallidos,
+            "tasa_error": error_rate,
+            "ultima_lectura": self.ultima_lectura
+        }
+
+# Funciones para manejo de sensores
 def listar_puertos_usb():
-    puertos = glob.glob('/dev/ttyUSB*')
+    puertos = glob.glob('/dev/sensor_*')
     return puertos
 
 def reiniciar_puertos():
-    subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "cycle"])
-
-
-def cerrar_puerto_actual():
-    """
-    Cierra la conexión serial actual si existe.
-    """
-    global SER
-    if SER and SER.is_open:
+    try:
+        print("Reiniciando puertos USB...")
+        subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "cycle"], check=False)
+        print("Esperando a que los puertos se reinicien...")
+        time.sleep(5)
+        print("Puertos USB reiniciados.")
+        return True
+    except Exception as e:
+        print(f"Error al reiniciar puertos USB: {e}")
+        print("Intentando alternativa...")
         try:
-            SER.close()
-            print(f"Puerto serial cerrado correctamente.")
-        except Exception as e:
-            print(f"Error al cerrar puerto serial: {e}")
-        SER = None
+            # Alternativa si uhubctl no está disponible
+            subprocess.run(["sudo", "modprobe", "-r", "ehci_hcd"], check=False)
+            time.sleep(2)
+            subprocess.run(["sudo", "modprobe", "ehci_hcd"], check=False)
+            time.sleep(5)
+            print("Puertos USB reiniciados usando modprobe.")
+            return True
+        except Exception as e2:
+            print(f"Error al reiniciar puertos usando método alternativo: {e2}")
+            return False
+
+def cerrar_todos_sensores():
+    """
+    Cierra todas las conexiones de sensores
+    """
+    global SENSORES
+    for sensor in SENSORES:
+        sensor.cerrar()
+    SENSORES.clear()
     return True
 
-def iniciar_sensor_a010(puerto):
+def inicializar_sensor(puerto, id_sensor=0):
     """
-    Inicializa el sensor Maix Sense A010 en el puerto especificado.
+    Inicializa un nuevo sensor A010
     """
-    global SER
-    
-    # Primero cerrar cualquier conexión existente
-    cerrar_puerto_actual()
-    
-    try:
-        # Liberar el puerto por si está en uso
-        try:
-            output = subprocess.check_output(['lsof', puerto])
-            lines = output.decode().split('\n')[1:]
-            for line in lines:
-                if line:
-                    pid = int(line.split()[1])
-                    print(f"Liberando puerto {puerto} (PID {pid})")
-                    os.kill(pid, 9)
-        except:
-            pass
-            
-        # Abrir conexión serial
-        SER = serial.Serial(puerto, BAUDRATE, timeout=TIMEOUT)
-        print(f"Sensor de profundidad A010 inicializado en puerto {puerto}.")
-        
-        # Enviar comandos de configuración
-        commands = [
-            b'AT+BAUD=5\r',
-            b'AT+PC=1\r',
-            b'AT+VIDEO=1\r',
-            b'AT+ISP=1\r',
-            b'AT+DISP=3\r'
-        ]
-        for cmd in commands:
-            SER.write(cmd)
-            time.sleep(0.2)
-            SER.read_all()
-            
-        # Verificar que el sensor esté listo
-        print("Sensor A010 listo para su uso.")
-        return True
-    except Exception as e:
-        print(f"Error al inicializar el sensor A010 en {puerto}: {e}")
-        return False
-    
-def probar_sensor_a010(solo_conectividad=True):
-    """
-    Realiza una prueba del sensor A010 para verificar su funcionamiento.
-    Si solo_conectividad=True, solo verifica que el sensor esté conectado.
-    Si solo_conectividad=False, realiza una prueba completa de detección de movimiento.
-    """
-    global SER
-    print("Iniciando prueba del sensor A010...")
-    
-    if SER is None or not SER.is_open:
-        print("Error: El sensor A010 no está inicializado.")
-        return False
-    
-    # Prueba básica de conectividad
-    # Intentar leer varios frames
-    frames_capturados = 0
-    frames_necesarios = 5
-    frames = []
-    
-    print(f"Intentando capturar {frames_necesarios} frames para verificar el sensor...")
-    
-    # Limpiar buffer
-    SER.read_all()
-    
-    timeout_start = time.time()
-    while frames_capturados < frames_necesarios:
-        if time.time() - timeout_start > 10:  # Timeout de 10 segundos
-            print("Tiempo de espera agotado. El sensor podría no estar funcionando correctamente.")
-            return False
-            
-        frame = leer_frame_profundidad()
-        if frame is not None:
-            frames.append(frame)
-            frames_capturados += 1
-            print(f"Frame {frames_capturados}/{frames_necesarios} capturado.")
-            
-            # Mostrar el frame para debug visual
-            cv2.imshow('Prueba Sensor A010', frame)
-            cv2.waitKey(500)  # Esperar 500ms
-        
-        time.sleep(0.1)
-    
-    # Analizar estadísticas básicas de los frames
-    if frames:
-        promedio_intensidad = np.mean([np.mean(f) for f in frames])
-        desviacion = np.std([np.mean(f) for f in frames])
-        print(f"Estadísticas del sensor: Intensidad promedio={promedio_intensidad:.2f}, Desviación={desviacion:.2f}")
-        
-        # Verificar si las estadísticas son razonables
-        conectividad_ok = promedio_intensidad > 5 and desviacion < 50
-        
-        if not conectividad_ok:
-            print("El sensor A010 muestra valores anómalos. Verifique su posición o conexión.")
-            return False
-        else:
-            print("El sensor A010 está conectado correctamente.")
-            
-            # Si solo queríamos verificar la conectividad, terminamos aquí
-            if solo_conectividad:
-                return True
-                
-            # Prueba de detección de movimiento
-            return probar_deteccion_movimiento()
-    
-    print("No se pudieron capturar suficientes frames. Verifique la conexión del sensor.")
-    return False
-
-def probar_deteccion_movimiento():
-    """
-    Prueba la capacidad de detección de movimiento del sensor A010 sin activar el motor3.
-    """
-    print("\n--- PRUEBA DE DETECCIÓN DE MOVIMIENTO ---")
-    print("Por favor, mueva un objeto frente al sensor para probar la detección.")
-    print("El sistema esperará hasta detectar movimiento para continuar.")
-    
-    # Definir ROI y preparar máscara
-    roi_pts = np.array([(30, 30), (70, 30), (70, 70), (30, 70)], dtype=np.int32)
-    
-    def get_mask_from_polygon(shape, polygon):
-        mask = np.zeros(shape, dtype=np.uint8)
-        return cv2.fillPoly(mask, [polygon], 255)
-    
-    # Estabilizar la escena para tener un frame de referencia
-    print("Estabilizando la escena para prueba de detección...")
-    ref_frame = None
-    stable_count = 0
-    intentos = 0
-    tiempo_inicio_estabilizacion = time.time()
-    
-    while stable_count < 5 and intentos < MAX_INTENTOS_ESTABILIZACION and (time.time() - tiempo_inicio_estabilizacion < 15):
-        intentos += 1
-        frame = leer_frame_profundidad()
-        if frame is None:
-            continue
-            
-        frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
-        
-        if ref_frame is None:
-            ref_frame = frame_blur
-            continue
-            
-        # Calcular diferencia con frame anterior
-        diff = cv2.absdiff(ref_frame, frame_blur)
-        diff_mask = get_mask_from_polygon(diff.shape, roi_pts)
-        diff_roi = cv2.bitwise_and(diff, diff, mask=diff_mask)
-        _, diff_thresh = cv2.threshold(diff_roi, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-        changes = cv2.countNonZero(diff_thresh)
-        
-        if changes < PIXEL_CHANGE_LIMIT:
-            stable_count += 1
-            print(f"Frame estable {stable_count}/5")
-        else:
-            stable_count = 0
-            print(f"Reseteo de estabilización. Intento {intentos}/{MAX_INTENTOS_ESTABILIZACION}")
-            
-        ref_frame = frame_blur
-        
-        # Mostrar frame actual con ROI
-        img_display = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-        cv2.polylines(img_display, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
-        cv2.putText(img_display, "Estabilizando...", (10, 20), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        cv2.imshow('Prueba Detección', img_display)
-        if cv2.waitKey(1) & 0xFF == 27:  # ESC para salir
-            print("Prueba cancelada por el usuario.")
-            return False
-    
-    if stable_count < 5:
-        print("No se pudo estabilizar la escena. Continuando con la mejor referencia disponible.")
-        
-    # Crear máscara para la ROI
-    mask_roi = get_mask_from_polygon(ref_frame.shape, roi_pts)
-    
-    # Monitorear movimiento
-    tiempo_inicio = time.time()
-    tiempo_maximo = 60  # Tiempo máximo de espera: 60 segundos
-    movimiento_detectado = False
-    detecciones_contador = 0
-    
-    print("\nEsperando detección de movimiento. Mueva un objeto frente al sensor...")
-    print("Presione ESC para cancelar la prueba.")
-    
-    while time.time() - tiempo_inicio < tiempo_maximo:
-        tiempo_transcurrido = int(time.time() - tiempo_inicio)
-        tiempo_restante = tiempo_maximo - tiempo_transcurrido
-        
-        frame = leer_frame_profundidad()
-        if frame is None:
-            continue
-            
-        frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
-        
-        # Aplicar ROI
-        roi_ref = cv2.bitwise_and(ref_frame, ref_frame, mask=mask_roi)
-        roi_now = cv2.bitwise_and(frame_blur, frame_blur, mask=mask_roi)
-        
-        # Calcular diferencia
-        diff = cv2.absdiff(roi_ref, roi_now)
-        _, diff_thresh = cv2.threshold(diff, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-        num_changes = cv2.countNonZero(diff_thresh)
-        
-        # Verificar si hay movimiento
-        if num_changes > PIXEL_CHANGE_LIMIT:
-            detecciones_contador += 1
-            print(f"Movimiento detectado ({detecciones_contador}/3)")
-            
-            if detecciones_contador >= 3:  # Requerir 3 detecciones para confirmación
-                print("\n¡MOVIMIENTO CONFIRMADO! Prueba de detección exitosa.")
-                movimiento_detectado = True
-                break
-        
-        # Mostrar visualización
-        img_display = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-        cv2.polylines(img_display, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
-        
-        estado = "MOVIMIENTO DETECTADO" if num_changes > PIXEL_CHANGE_LIMIT else "Esperando movimiento..."
-        color = (0, 0, 255) if num_changes > PIXEL_CHANGE_LIMIT else (0, 255, 0)
-        
-        cv2.putText(img_display, f"Tiempo restante: {tiempo_restante}s", (10, 20), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(img_display, estado, (10, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-        cv2.putText(img_display, f"Cambios: {num_changes}/{PIXEL_CHANGE_LIMIT}", (10, 60), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # Mostrar la máscara de diferencia para mejor visualización
-        diff_display = cv2.cvtColor(diff_thresh, cv2.COLOR_GRAY2BGR)
-        combined = np.hstack((img_display, diff_display))
-        cv2.imshow('Prueba Detección', combined)
-        
-        if cv2.waitKey(1) & 0xFF == 27:  # ESC para salir
-            print("Prueba cancelada por el usuario.")
-            return False
-    
-    cv2.destroyWindow('Prueba Detección')
-    
-    if movimiento_detectado:
-        return True
-    else:
-        print("\nTiempo agotado. No se detectó movimiento suficiente durante la prueba.")
-        return False
-    
-def leer_frame_profundidad():
-    """
-    Lee un frame de datos de profundidad del sensor A010.
-    Devuelve una matriz numpy de tamaño FRAME_HEIGHT x FRAME_WIDTH.
-    """
-    global SER
-    if SER is None or not SER.is_open:
-        print("Error: El sensor A010 no está inicializado.")
-        return None
-        
-    try:
-        # Establecer timeout para evitar bloqueos indefinidos
-        timeout = time.time() + 2  # 2 segundos timeout
-        
-        while time.time() < timeout:
-            header = SER.read(2)
-            if header == b'\x00\xff':
-                length_bytes = SER.read(2)
-                if len(length_bytes) < 2:
-                    continue
-                frame_len = int.from_bytes(length_bytes, 'little')
-                frame_data = SER.read(frame_len)
-                if len(frame_data) >= HEADER_SIZE + FRAME_SIZE:
-                    frame_body = frame_data[HEADER_SIZE:HEADER_SIZE + FRAME_SIZE]
-                    return np.frombuffer(frame_body, dtype=np.uint8).reshape((FRAME_HEIGHT, FRAME_WIDTH))
-        
-        # Si llegamos aquí, no se pudo leer un frame completo
-        print("Tiempo de espera agotado al leer frame del sensor.")
-        return None
-    except Exception as e:
-        print(f"Error al leer frame de profundidad: {e}")
-        return None
-            
-def detectar_movimiento_a010(motor):
-    """
-    Detecta movimiento utilizando el sensor de profundidad A010.
-    Con mejoras en la estabilización.
-    """
-    global SER, detener_hilo
-    detener_hilo.clear()
-    
-    # Definir región de interés (ROI) - ajustar según la ubicación del sensor
-    roi_pts = np.array([(30, 30), (70, 30), (70, 70), (30, 70)], dtype=np.int32)
-    
-    # Preparar máscara para la región de interés
-    def get_mask_from_polygon(shape, polygon):
-        mask = np.zeros(shape, dtype=np.uint8)
-        return cv2.fillPoly(mask, [polygon], 255)
-    
-    # Estabilizar la escena (obtener frame de referencia) con control de intentos
-    print("Estabilizando la escena...")
-    ref_frame = None
-    stable_count = 0
-    intentos = 0
-    
-    while stable_count < 5 and intentos < MAX_INTENTOS_ESTABILIZACION:  # Requerir 5 frames estables con límite de intentos
-        intentos += 1
-        frame = leer_frame_profundidad()
-        if frame is None:
-            print(f"No se pudo leer frame en intento {intentos}")
-            time.sleep(0.2)
-            continue
-            
-        frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
-        
-        if ref_frame is None:
-            ref_frame = frame_blur
-            continue
-            
-        # Calcular diferencia con frame anterior
-        diff = cv2.absdiff(ref_frame, frame_blur)
-        diff_mask = get_mask_from_polygon(diff.shape, roi_pts)
-        diff_roi = cv2.bitwise_and(diff, diff, mask=diff_mask)
-        _, diff_thresh = cv2.threshold(diff_roi, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-        changes = cv2.countNonZero(diff_thresh)
-        
-        if changes < PIXEL_CHANGE_LIMIT:
-            stable_count += 1
-            print(f"Frame estable {stable_count}/5")
-        else:
-            stable_count = 0
-            print(f"Reseteo de estabilización. Intento {intentos}/{MAX_INTENTOS_ESTABILIZACION}")
-            
-        ref_frame = frame_blur
-    
-    # Verificar si se logró la estabilización
-    if stable_count < 5:
-        print("¡ADVERTENCIA! No se pudo estabilizar la escena después de múltiples intentos.")
-        print("Continuando con la mejor referencia disponible...")
-    
-    # Iniciar hilo de control del motor
-    print("Detector de movimiento iniciado.")
-    time.sleep(1)
-    hilo_velocidad = threading.Thread(target=perfil_velocidad, args=(motor,))
-    hilo_velocidad.start()
-    
-    # Máscara ROI
-    mask_roi = get_mask_from_polygon(ref_frame.shape, roi_pts)
-    
-    # Monitorear movimiento
-    movimiento_detectado = False
-    detecciones_contador = 0
-    tiempo_inicio = time.time()
-    tiempo_maximo = 30  # Tiempo máximo de espera en segundos
-
-    while time.time() - tiempo_inicio < tiempo_maximo:
-        frame = leer_frame_profundidad()
-        if frame is None:
-            continue
-            
-        frame_blur = cv2.GaussianBlur(frame, (3, 3), 0)
-        
-        # Aplicar ROI
-        roi_ref = cv2.bitwise_and(ref_frame, ref_frame, mask=mask_roi)
-        roi_now = cv2.bitwise_and(frame_blur, frame_blur, mask=mask_roi)
-        
-        # Calcular diferencia
-        diff = cv2.absdiff(roi_ref, roi_now)
-        _, diff_thresh = cv2.threshold(diff, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-        num_changes = cv2.countNonZero(diff_thresh)
-
-        # Dentro del bucle while
-        if num_changes > PIXEL_CHANGE_LIMIT:
-            detecciones_contador += 1
-            print(f"Movimiento detectado ({detecciones_contador}/2)")
-            
-            if detecciones_contador >= 2:
-                print("Movimiento confirmado: Detener eyector.")
-                movimiento_detectado = True
-                detener_hilo.set()
-                hilo_velocidad.join()
-                detener_hilo.clear()
-                break
-            
-        # Opcional: Mostrar visualización para debug
-        img_gray = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-        cv2.polylines(img_gray, [roi_pts], isClosed=True, color=(0, 255, 0), thickness=1)
-        cv2.putText(img_gray, f"Tiempo: {int(time.time() - tiempo_inicio)}s", (10, 20), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        cv2.imshow('Sensor A010', img_gray)
-        if cv2.waitKey(1) & 0xFF == 27:
+    # Primero comprobar si ya hay un sensor con ese puerto
+    for sensor in SENSORES:
+        if sensor.puerto == puerto:
+            print(f"Ya existe un sensor en el puerto {puerto}. Cerrándolo primero.")
+            sensor.cerrar()
+            SENSORES.remove(sensor)
             break
     
-    # Si se agotó el tiempo, detener el hilo de velocidad
-    if not movimiento_detectado:
-        print(f"Tiempo máximo de detección ({tiempo_maximo}s) alcanzado. Deteniendo motor.")
-        detener_hilo.set()
-        hilo_velocidad.join()
-        detener_hilo.clear()
-    
-    if movimiento_detectado:
-        print("Movimiento detectado, reiniciando detección.")
-        return True
-    
-    return False
-    
-def perfil_velocidad(motor3):
-    """
-    Realizando perfil de velocidad
-    """
-    while not detener_hilo.is_set():
-        motor3.mover(direccion=1, pasos=1, retardo=0.0008)
+    # Crear y añadir el nuevo sensor
+    nuevo_sensor = SensorA010(puerto, id_sensor)
+    if nuevo_sensor.inicializar():
+        SENSORES.append(nuevo_sensor)
+        return nuevo_sensor
+    return None
 
-
-def extender_actuador(velocidad):
+def probar_sensor(sensor, mostrar_frames=True):
     """
-    Extiende el actuador lineal.
-    :param velocidad: Velocidad de extensión (0.0 a 1.0).
+    Prueba un sensor específico
     """
-    print(f"Extendiendo actuador con velocidad {velocidad}")
-    RPWM.value = 0
-    LPWM.value = velocidad
-    time.sleep(1.9)  # Ajusta el tiempo según lo necesario
-    parar_actuador()
+    if not sensor or not sensor.conectado:
+        print("El sensor no está conectado o inicializado.")
+        return False
     
-def parar_actuador():
+    print(f"\n--- PRUEBA DEL SENSOR {sensor.id_sensor} ---")
+    print("Intentando capturar y mostrar frames del sensor...")
+    
+    frames_capturados = 0
+    max_frames = 30
+    start_time = time.time()
+    window_name = f"Sensor {sensor.id_sensor}"
+    
+    try:
+        if mostrar_frames:
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        
+        while frames_capturados < max_frames:
+            frame = sensor.leer_frame()
+            
+            if frame is not None:
+                frames_capturados += 1
+                
+                if mostrar_frames:
+                    # Mejorar la visualización
+                    frame_norm = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX)
+                    frame_colored = cv2.applyColorMap(frame_norm, cv2.COLORMAP_JET)
+                    
+                    # Añadir información
+                    cv2.putText(frame_colored, f"Frame: {frames_capturados}/{max_frames}", (10, 20), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    cv2.putText(frame_colored, f"Sensor ID: {sensor.id_sensor}", (10, 40), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    
+                    cv2.imshow(window_name, frame_colored)
+                    key = cv2.waitKey(100)
+                    if key == 27:  # ESC para salir
+                        break
+                
+                print(f"Frame {frames_capturados}/{max_frames} capturado. Media: {np.mean(frame):.2f}, Min: {np.min(frame)}, Max: {np.max(frame)}")
+            
+            else:
+                print(f"No se pudo capturar el frame {frames_capturados+1}.")
+                time.sleep(0.1)
+            
+            # Si tarda más de 20 segundos, abortamos
+            if time.time() - start_time > 20:
+                print("Tiempo de prueba excedido.")
+                break
+        
+        fps = frames_capturados / (time.time() - start_time)
+        print(f"\nPrueba completada: {frames_capturados} frames capturados a {fps:.2f} FPS")
+        
+        # Evaluar resultado
+        if frames_capturados >= max_frames * 0.8:  # 80% o más frames capturados correctamente
+            print("RESULTADO: El sensor funciona correctamente.")
+            resultado = True
+        elif frames_capturados >= max_frames * 0.3:  # Entre 30% y 80%
+            print("RESULTADO: El sensor funciona con algunos problemas de estabilidad.")
+            resultado = True
+        else:
+            print("RESULTADO: El sensor no funciona correctamente.")
+            resultado = False
+        
+        if mostrar_frames:
+            # Mantener la ventana abierta hasta que se presione una tecla
+            print("Presione cualquier tecla para continuar...")
+            cv2.waitKey(0)
+            cv2.destroyWindow(window_name)
+        
+        return resultado
+    
+    except Exception as e:
+        print(f"Error durante la prueba del sensor: {e}")
+        if mostrar_frames:
+            cv2.destroyWindow(window_name)
+        return False
+
+def probar_todos_sensores():
     """
-    Detiene el actuador lineal.
+    Prueba todos los sensores conectados
     """
-    RPWM.value = 0 
-    LPWM.value = 0
-    print("Actuador detenido")
+    if not SENSORES:
+        print("No hay sensores inicializados.")
+        return False
+    
+    resultados = []
+    for sensor in SENSORES:
+        print(f"\nProbando sensor {sensor.id_sensor} en puerto {sensor.puerto}...")
+        resultado = probar_sensor(sensor)
+        resultados.append(resultado)
+        time.sleep(1)
+    
+    # Mostrar resumen
+    print("\n--- RESUMEN DE PRUEBAS ---")
+    for i, sensor in enumerate(SENSORES):
+        estado = sensor.obtener_estado()
+        print(f"Sensor {estado['id']} en {estado['puerto']}: {'OK' if resultados[i] else 'FALLO'}")
+        print(f"  - Frames leídos: {estado['frames_leidos']}")
+        print(f"  - Frames fallidos: {estado['frames_fallidos']}")
+        print(f"  - Tasa de error: {estado['tasa_error']:.2f}%")
+    
+    return all(resultados)
 
 def menu_principal():
     """
@@ -490,11 +388,20 @@ def menu_principal():
     """
     while True:
         print("\n----- SISTEMA DE PRUEBA DE SENSORES A010 -----")
+        print(f"Sensores activos: {len(SENSORES)}")
+        for i, sensor in enumerate(SENSORES):
+            estado = sensor.obtener_estado()
+            print(f"  {i+1}. Sensor {estado['id']} en {estado['puerto']} - {'Conectado' if estado['conectado'] else 'Desconectado'}")
+        
+        print("\nOpciones:")
         print("1. Listar puertos USB disponibles")
-        print("2. Seleccionar puerto y probar sensor")
-        print("3. Extender actuador (prueba independiente)")
-        print("4. Probar detección de movimiento completa")
-        print("5. Reiniciar puertos")
+        print("2. Inicializar nuevo sensor")
+        print("3. Probar sensor específico")
+        print("4. Probar todos los sensores")
+        print("5. Cerrar un sensor")
+        print("6. Cerrar todos los sensores")
+        print("7. Diagnosticar problemas de conexión")
+        print("8. Reiniciar puertos USB")
         print("0. Salir")
         
         opcion = input("\nSeleccione una opción: ")
@@ -523,83 +430,180 @@ def menu_principal():
                 indice = int(seleccion) - 1
                 if 0 <= indice < len(puertos):
                     puerto_seleccionado = puertos[indice]
-                    print(f"\nIniciando prueba en puerto {puerto_seleccionado}...")
+                    id_sensor = len(SENSORES) + 1
+                    print(f"\nIniciando sensor {id_sensor} en puerto {puerto_seleccionado}...")
                     
-                    if iniciar_sensor_a010(puerto_seleccionado):
-                        probar_sensor_a010(solo_conectividad=True)
-                    else:
-                        print(f"No se pudo inicializar el sensor en {puerto_seleccionado}")
+                    sensor = inicializar_sensor(puerto_seleccionado, id_sensor)
+                    if sensor:
+                        preguntar = input("¿Desea probar el sensor ahora? (s/n): ")
+                        if preguntar.lower() == 's':
+                            probar_sensor(sensor)
                 else:
                     print("Número de puerto inválido.")
             except ValueError:
                 print("Por favor, ingrese un número válido.")
                 
         elif opcion == "3":
-            velocidad = float(input("Ingrese velocidad del actuador (0.0-1.0): "))
-            if 0.0 <= velocidad <= 1.0:
-                extender_actuador(velocidad)
-            else:
-                print("Velocidad fuera de rango. Debe estar entre 0.0 y 1.0")
-                
-        elif opcion == "4":
-            puertos = listar_puertos_usb()
-            if not puertos:
-                print("No se encontraron puertos USB disponibles.")
+            if not SENSORES:
+                print("No hay sensores inicializados.")
                 continue
                 
-            print("\nPuertos USB disponibles:")
-            for i, puerto in enumerate(puertos):
-                print(f"{i+1}. {puerto}")
+            print("\nSensores disponibles:")
+            for i, sensor in enumerate(SENSORES):
+                estado = sensor.obtener_estado()
+                print(f"{i+1}. Sensor {estado['id']} en {estado['puerto']}")
                 
-            seleccion = input("\nSeleccione un puerto (número): ")
+            seleccion = input("\nSeleccione un sensor (número): ")
             try:
                 indice = int(seleccion) - 1
-                if 0 <= indice < len(puertos):
-                    puerto_seleccionado = puertos[indice]
-                    print(f"\nIniciando prueba completa en puerto {puerto_seleccionado}...")
-                    
-                    if iniciar_sensor_a010(puerto_seleccionado):
-                        # Esta parte asume que hay un motor3 disponible para la prueba
-                        # Si no está disponible, modifica esto según sea necesario
-                        try:
-                            motor3 = MotorNema(26, 0, 0, 0)  # Ajusta los pines según la configuración real
-                            detectar_movimiento_a010(motor3)
-                        except Exception as e:
-                            print(f"Error al iniciar prueba completa: {e}")
-                            print("¿Desea probar solo el sensor sin el motor? (s/n)")
-                            resp = input()
-                            if resp.lower() == 's':
-                                probar_sensor_a010(solo_conectividad=False)
-                    else:
-                        print(f"No se pudo inicializar el sensor en {puerto_seleccionado}")
+                if 0 <= indice < len(SENSORES):
+                    probar_sensor(SENSORES[indice])
                 else:
-                    print("Número de puerto inválido.")
+                    print("Número de sensor inválido.")
             except ValueError:
                 print("Por favor, ingrese un número válido.")
-        
+                
+        elif opcion == "4":
+            probar_todos_sensores()
+                
         elif opcion == "5":
+            if not SENSORES:
+                print("No hay sensores para cerrar.")
+                continue
+                
+            print("\nSensores disponibles:")
+            for i, sensor in enumerate(SENSORES):
+                estado = sensor.obtener_estado()
+                print(f"{i+1}. Sensor {estado['id']} en {estado['puerto']}")
+                
+            seleccion = input("\nSeleccione un sensor para cerrar (número): ")
+            try:
+                indice = int(seleccion) - 1
+                if 0 <= indice < len(SENSORES):
+                    sensor = SENSORES.pop(indice)
+                    sensor.cerrar()
+                    print(f"Sensor {sensor.id_sensor} cerrado y eliminado.")
+                else:
+                    print("Número de sensor inválido.")
+            except ValueError:
+                print("Por favor, ingrese un número válido.")
+                
+        elif opcion == "6":
+            cerrar_todos_sensores()
+            print("Todos los sensores han sido cerrados.")
+                
+        elif opcion == "7":
+            diagnosticar_problemas_conexion()
+                
+        elif opcion == "8":
             print("Reiniciando puertos...")
+            cerrar_todos_sensores()  # Cerrar sensores antes de reiniciar
             reiniciar_puertos()
-            print("Recuperando puertos...")
-            time.sleep(5)
-
+            print("Reinicio completo.")
+                
         elif opcion == "0":
             print("Saliendo del programa...")
-            cerrar_puerto_actual()
+            cerrar_todos_sensores()
             break
-         
+             
         else:
             print("Opción no válida. Intente de nuevo.")
+
+def diagnosticar_problemas_conexion():
+    """
+    Función para diagnosticar problemas comunes de conexión
+    """
+    print("\n--- DIAGNÓSTICO DE PROBLEMAS DE CONEXIÓN ---")
+    
+    # 1. Verificar puertos disponibles
+    puertos = listar_puertos_usb()
+    if not puertos:
+        print("PROBLEMA DETECTADO: No hay puertos USB disponibles.")
+        print("Soluciones posibles:")
+        print("- Verifique que los sensores estén conectados físicamente")
+        print("- Pruebe en otro puerto USB")
+        print("- Reinicie el dispositivo")
+        print("- Verifique los permisos de usuario para acceder a los puertos")
+        return
+    
+    print(f"OK: Se encontraron {len(puertos)} puertos USB: {', '.join(puertos)}")
+    
+    # 2. Verificar permisos
+    try:
+        for puerto in puertos:
+            proceso = subprocess.run(['ls', '-l', puerto], capture_output=True, text=True)
+            salida = proceso.stdout.strip()
+            print(f"Permisos para {puerto}: {salida}")
+            
+            if 'dialout' in salida and os.getuid() != 0:
+                usuario = subprocess.run(['whoami'], capture_output=True, text=True).stdout.strip()
+                grupos = subprocess.run(['groups', usuario], capture_output=True, text=True).stdout.strip()
+                
+                if 'dialout' not in grupos:
+                    print("PROBLEMA DETECTADO: El usuario actual no pertenece al grupo 'dialout'")
+                    print("Solución:")
+                    print("  sudo usermod -a -G dialout $USER")
+                    print("  (Necesitará cerrar sesión y volver a iniciarla)")
+    except Exception as e:
+        print(f"Error al verificar permisos: {e}")
+    
+    # 3. Verificar si el kernel reconoce los dispositivos
+    try:
+        proceso = subprocess.run(['dmesg', '|', 'grep', 'ttyUSB'], shell=True, capture_output=True, text=True)
+        salida = proceso.stdout.strip()
+        if salida:
+            print("\nRegistros del kernel relacionados con dispositivos USB:")
+            print(salida)
+    except Exception as e:
+        print(f"Error al obtener registros del kernel: {e}")
+    
+    # 4. Verificar carga del driver
+    try:
+        proceso = subprocess.run(['lsmod', '|', 'grep', 'cp210x'], shell=True, capture_output=True, text=True)
+        if proceso.stdout.strip():
+            print("\nOK: Driver CP210x cargado correctamente")
+        else:
+            print("\nPROBLEMA DETECTADO: Driver CP210x no parece estar cargado")
+            print("Solución:")
+            print("  sudo modprobe cp210x")
+    except Exception as e:
+        print(f"Error al verificar driver: {e}")
+    
+    # 5. Sugerencias generales
+    print("\nRECOMENDACIONES GENERALES:")
+    print("1. Si los sensores funcionan intermitentemente, puede ser un problema de alimentación.")
+    print("   - Utilice un hub USB con alimentación externa")
+    print("   - Evite cables USB largos o de baja calidad")
+    print("2. Si un sensor deja de funcionar cuando conecta otro:")
+    print("   - Puede haber conflicto de recursos")
+    print("   - Pruebe a conectarlos en puertos USB de diferentes controladores")
+    print("3. Si los sensores se detectan pero luego fallan:")
+    print("   - Pruebe a reiniciar los puertos USB")
+    print("   - Verifique la velocidad de transmisión")
+    
+    print("\nDiagnóstico completo.")
 
 def main():
     try:
         menu_principal()
     except KeyboardInterrupt:
         print("\n--------------Programa interrumpido manualmente.--------------")
+    except Exception as e:
+        print(f"\n--------------Error inesperado: {e}--------------")
     finally:
-        # Cerrar conexión con el sensor A010
-        cerrar_puerto_actual()
+        # Cerrar todas las ventanas de OpenCV
+        cv2.destroyAllWindows()
+        # Cerrar conexiones con los sensores
+        cerrar_todos_sensores()
         print("Recursos liberados correctamente.")
 
 if __name__ == "__main__":
     main()
+
+# sudo nano /etc/udev/rules.d/99-ftdi-sensors.rules
+
+# # Sensor 1
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", ATTRS{serial}=="202206 48535F", SYMLINK+="sensor_1"
+
+# # Sensor 2
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", ATTRS{serial}=="202206 C86F5F", SYMLINK+="sensor_2"
